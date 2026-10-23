@@ -138,7 +138,7 @@ fun SettingsScreen(onBack: () -> Unit, onTransfer: () -> Unit = {}) {
             val uName by UiPrefs.userName.collectAsState()
             androidx.compose.material3.OutlinedTextField(
                 value = uName, onValueChange = { UiPrefs.setUserName(context, it) }, singleLine = true,
-                label = { Text("Dein Name (für die Begrüßung)") }, modifier = Modifier.fillMaxWidth()
+                label = { Text("Dein Name (Begrüßung „Hi …“ oben)") }, modifier = Modifier.fillMaxWidth()
             )
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
             Text("Design der Aufgabenübersicht", style = MaterialTheme.typography.titleMedium)

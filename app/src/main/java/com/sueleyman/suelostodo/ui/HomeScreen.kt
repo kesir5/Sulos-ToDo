@@ -6,6 +6,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -95,6 +96,30 @@ import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
+/** The four icons in the top bar sit closer together (36 dp instead of 48 dp touch boxes). */
+private val TopIcon = Modifier.size(width = 34.dp, height = 30.dp)
+
+/** Rectangular segmented buttons in the top bar: thin frame, thin vertical lines between the icons. */
+@Composable
+private fun IconGroup(line: Color, vararg buttons: (@Composable () -> Unit)?) {
+    val items = buttons.filterNotNull()
+    Row(
+        Modifier.height(IntrinsicSize.Min).border(1.dp, line, RoundedCornerShape(4.dp)),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        items.forEachIndexed { i, b ->
+            if (i > 0) Box(Modifier.width(1.dp).fillMaxHeight().background(line))
+            b()
+        }
+    }
+}
+
+/** Rectangular (not round) touch area for the top-bar buttons. */
+@Composable
+private fun SquareIcon(onClick: () -> Unit, content: @Composable () -> Unit) {
+    Box(TopIcon.clickable(onClick = onClick), contentAlignment = Alignment.Center) { content() }
+}
+
 /** Callbacks for group headers and list rows. */
 private class HomeActions(
     val arrange: () -> Unit,
@@ -157,25 +182,35 @@ fun HomeScreen(
             val ctx = androidx.compose.ui.platform.LocalContext.current
             // always visible next to the settings icon (also when there are no groups yet)
             val foldAll: (@Composable (Color) -> Unit)? = { tint ->
-                IconButton(onClick = {
+                SquareIcon(onClick = {
                     if (state.groups.isEmpty()) android.widget.Toast.makeText(
                         ctx, "Noch keine Gruppen – lege unten über „Gruppe“ eine an.", android.widget.Toast.LENGTH_SHORT
                     ).show() else vm.toggleAllGroups()
                 }) {
                     Icon(
                         if (allOpen) Icons.Outlined.UnfoldLess else Icons.Outlined.UnfoldMore,
-                        if (allOpen) "Alle Gruppen einklappen" else "Alle Gruppen ausklappen", tint = tint
+                        if (allOpen) "Alle Gruppen einklappen" else "Alle Gruppen ausklappen", Modifier.size(20.dp), tint = tint
                     )
                 }
             }
             if (style == HomeStyle.GREETING) GreetingHeader(state, userName, onSettings, onArrange, foldAll, onSearch)
             else TopAppBar(
-                title = { Text("Sülos ToDo", fontWeight = FontWeight.SemiBold) },
+                title = {
+                    Text(
+                        if (userName.isBlank()) "Sülos ToDo" else "Hi ${userName.trim()}",
+                        fontWeight = FontWeight.SemiBold, maxLines = 1
+                    )
+                },
                 actions = {
-                    IconButton(onClick = onSearch) { Icon(Icons.Outlined.Search, "Suchen") }
-                    IconButton(onClick = onArrange) { Icon(Icons.Outlined.SwapVert, "Listen anordnen") }
-                    foldAll?.invoke(MaterialTheme.colorScheme.onSurfaceVariant)
-                    IconButton(onClick = onSettings) { Icon(Icons.Outlined.Settings, "Einstellungen") }
+                    val tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    IconGroup(
+                        MaterialTheme.colorScheme.outlineVariant,
+                        { SquareIcon(onSearch) { Icon(Icons.Outlined.Search, "Suchen", Modifier.size(20.dp), tint = tint) } },
+                        { SquareIcon(onArrange) { Icon(Icons.Outlined.SwapVert, "Listen anordnen", Modifier.size(20.dp), tint = tint) } },
+                        foldAll?.let { f -> { f(tint) } },
+                        { SquareIcon(onSettings) { Icon(Icons.Outlined.Settings, "Einstellungen", Modifier.size(20.dp), tint = tint) } },
+                    )
+                    Spacer(Modifier.width(8.dp))
                 }
             )
         },
@@ -360,8 +395,6 @@ private fun GreetingHeader(
     foldAll: (@Composable (Color) -> Unit)?,
     onSearch: () -> Unit,
 ) {
-    val hour = LocalTime.now().hour
-    val hello = when { hour < 11 -> "Guten Morgen"; hour < 18 -> "Guten Tag"; else -> "Guten Abend" }
     val today = when (state.todayCount) { 0 -> "nichts fällig"; 1 -> "1 Aufgabe für heute"; else -> "${state.todayCount} Aufgaben für heute" }
     // compact: two lines, no button row
     Row(
@@ -371,7 +404,7 @@ private fun GreetingHeader(
     ) {
         Column(Modifier.weight(1f)) {
             Text(
-                if (name.isBlank()) "$hello!" else "$hello, ${name.trim()}",
+                if (name.isBlank()) "Hi!" else "Hi ${name.trim()}",
                 color = Color.White, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, maxLines = 1
             )
             Text(
@@ -379,10 +412,14 @@ private fun GreetingHeader(
                 color = Color.White.copy(alpha = 0.8f), style = MaterialTheme.typography.bodySmall, maxLines = 1
             )
         }
-        IconButton(onClick = onSearch) { Icon(Icons.Outlined.Search, "Suchen", tint = Color.White) }
-        IconButton(onClick = onArrange) { Icon(Icons.Outlined.SwapVert, "Listen anordnen", tint = Color.White) }
-        foldAll?.invoke(Color.White)
-        IconButton(onClick = onSettings) { Icon(Icons.Outlined.Settings, "Einstellungen", tint = Color.White) }
+        IconGroup(
+            Color.White.copy(alpha = 0.5f),
+            { SquareIcon(onSearch) { Icon(Icons.Outlined.Search, "Suchen", Modifier.size(20.dp), tint = Color.White) } },
+            { SquareIcon(onArrange) { Icon(Icons.Outlined.SwapVert, "Listen anordnen", Modifier.size(20.dp), tint = Color.White) } },
+            foldAll?.let { f -> { f(Color.White) } },
+            { SquareIcon(onSettings) { Icon(Icons.Outlined.Settings, "Einstellungen", Modifier.size(20.dp), tint = Color.White) } },
+        )
+        Spacer(Modifier.width(8.dp))
     }
 }
 
