@@ -144,7 +144,7 @@ fun HomeScreen(onOpenList: (String) -> Unit, onSettings: () -> Unit, onArrange: 
         containerColor = if (style == HomeStyle.TILES || style == HomeStyle.DASHBOARD)
             MaterialTheme.colorScheme.background else MaterialTheme.colorScheme.surface,
         topBar = {
-            if (style == HomeStyle.GREETING) GreetingHeader(state, userName, onSettings, onArrange, onOpenList)
+            if (style == HomeStyle.GREETING) GreetingHeader(state, userName, onSettings, onArrange)
             else TopAppBar(
                 title = { Text("Sülos ToDo", fontWeight = FontWeight.SemiBold) },
                 actions = {
@@ -178,7 +178,11 @@ fun HomeScreen(onOpenList: (String) -> Unit, onSettings: () -> Unit, onArrange: 
             // ---- smart lists / head area
             when (style) {
                 HomeStyle.TILES -> item { SmartTiles(state, onOpenList) }
-                HomeStyle.GREETING -> item { Spacer(Modifier.height(8.dp)) }
+                HomeStyle.GREETING -> {
+                    item { Spacer(Modifier.height(4.dp)) }
+                    compactSmartRows(state, onOpenList)
+                    item { HorizontalDivider(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) }
+                }
                 HomeStyle.DASHBOARD -> item { DashboardCard(state, onOpenList) }
                 else -> smartRows(state, onOpenList)
             }
@@ -309,45 +313,42 @@ private fun SmartTiles(state: HomeState, open: (String) -> Unit) {
 }
 
 @Composable
-private fun GreetingHeader(
-    state: HomeState, name: String, onSettings: () -> Unit, onArrange: () -> Unit, open: (String) -> Unit,
-) {
+private fun GreetingHeader(state: HomeState, name: String, onSettings: () -> Unit, onArrange: () -> Unit) {
     val hour = LocalTime.now().hour
     val hello = when { hour < 11 -> "Guten Morgen"; hour < 18 -> "Guten Tag"; else -> "Guten Abend" }
-    Column(
+    val today = when (state.todayCount) { 0 -> "nichts fällig"; 1 -> "1 Aufgabe für heute"; else -> "${state.todayCount} Aufgaben für heute" }
+    // compact: two lines, no button row
+    Row(
         Modifier.fillMaxWidth().background(Color(0xFF0C447C)).statusBarsPadding()
-            .padding(start = 20.dp, end = 8.dp, top = 8.dp, bottom = 18.dp)
+            .padding(start = 18.dp, end = 4.dp, top = 6.dp, bottom = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
             Text(
-                LocalDate.now().format(DateTimeFormatter.ofPattern("EEEE, d. MMMM", Locale.GERMAN)),
-                color = Color.White.copy(alpha = 0.8f), style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f)
+                if (name.isBlank()) "$hello!" else "$hello, ${name.trim()}",
+                color = Color.White, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, maxLines = 1
             )
-            IconButton(onClick = onArrange) { Icon(Icons.Outlined.SwapVert, "Listen anordnen", tint = Color.White) }
-            IconButton(onClick = onSettings) { Icon(Icons.Outlined.Settings, "Einstellungen", tint = Color.White) }
+            Text(
+                LocalDate.now().format(DateTimeFormatter.ofPattern("EE, d. MMM", Locale.GERMAN)) + " · " + today,
+                color = Color.White.copy(alpha = 0.8f), style = MaterialTheme.typography.bodySmall, maxLines = 1
+            )
         }
-        Text(
-            if (name.isBlank()) "$hello!" else "$hello, ${name.trim()}",
-            color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold
-        )
-        Text(
-            when (state.todayCount) { 0 -> "Heute ist nichts fällig"; 1 -> "1 Aufgabe für heute"; else -> "${state.todayCount} Aufgaben für heute" },
-            color = Color.White.copy(alpha = 0.8f), style = MaterialTheme.typography.bodyMedium
-        )
-        Spacer(Modifier.height(14.dp))
-        // the four smart lists in one row
-        Row(Modifier.padding(end = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            smartItems(state).forEach { s ->
-                Column(
-                    Modifier.weight(1f).clip(RoundedCornerShape(14.dp)).background(Color.White.copy(alpha = 0.14f))
-                        .clickable { open(s.id) }.padding(vertical = 10.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Icon(s.icon, null, tint = Color.White, modifier = Modifier.size(20.dp))
-                    Text("${s.count}", color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    Text(s.title, color = Color.White.copy(alpha = 0.85f), style = MaterialTheme.typography.labelSmall, maxLines = 1)
-                }
-            }
+        IconButton(onClick = onArrange) { Icon(Icons.Outlined.SwapVert, "Listen anordnen", tint = Color.White) }
+        IconButton(onClick = onSettings) { Icon(Icons.Outlined.Settings, "Einstellungen", tint = Color.White) }
+    }
+}
+
+/** Compact smart-list rows for the greeting layout. */
+private fun LazyListScope.compactSmartRows(state: HomeState, open: (String) -> Unit) {
+    items(smartItems(state), key = { "s" + it.id }) { s ->
+        Row(
+            Modifier.fillMaxWidth().clickable { open(s.id) }.padding(horizontal = 18.dp, vertical = 9.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(s.icon, null, tint = s.color, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(14.dp))
+            Text(s.title, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+            if (s.count > 0) Text("${s.count}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -472,14 +473,14 @@ private fun GroupHeader(node: GroupNode, style: HomeStyle, a: HomeActions, paren
             HomeStyle.GREETING -> {
                 val fg = accent.deep()
                 if (!sub) Row(
-                    Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 3.dp).clip(RoundedCornerShape(24.dp))
+                    Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 2.dp).clip(RoundedCornerShape(24.dp))
                         .background(accent.copy(alpha = 0.18f).compositeOver(surface)).then(click).padding(start = 12.dp, end = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     chevron(fg)
                     Spacer(Modifier.width(8.dp))
                     Text(g.name, color = fg, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyLarge,
-                        modifier = Modifier.weight(1f).padding(vertical = 11.dp))
+                        modifier = Modifier.weight(1f).padding(vertical = 7.dp))
                     Text("${node.open}", color = Color.White, style = MaterialTheme.typography.labelLarge,
                         modifier = Modifier.clip(RoundedCornerShape(10.dp)).background(accent).padding(horizontal = 8.dp, vertical = 2.dp))
                     menuButton(fg)
@@ -489,7 +490,7 @@ private fun GroupHeader(node: GroupNode, style: HomeStyle, a: HomeActions, paren
                 ) {
                     Icon(if (g.expanded) Icons.Outlined.FolderOpen else Icons.Outlined.Folder, null, tint = accent, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text(g.name, color = fg, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f).padding(vertical = 10.dp))
+                    Text(g.name, color = fg, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f).padding(vertical = 6.dp))
                     if (!g.expanded && node.open > 0) Text("${node.open}", color = muted, style = MaterialTheme.typography.bodySmall)
                     menuButton(muted)
                 }
@@ -632,6 +633,7 @@ private fun ListNavRow(l: ListWithCount, depth: Int, style: HomeStyle, groupTint
     // style 3 and 5 tint the lists in the group colour
     val tint = if (groupTint != null && (style == HomeStyle.ACCENT || style == HomeStyle.DASHBOARD || style == HomeStyle.GREETING))
         groupTint else listColor(l.color)
+    val vPad = if (style == HomeStyle.GREETING) 8.dp else 13.dp
     val indent = when (style) {
         HomeStyle.TILES -> 14 + depth * 16
         HomeStyle.ACCENT -> 18 + depth * 18
@@ -642,7 +644,7 @@ private fun ListNavRow(l: ListWithCount, depth: Int, style: HomeStyle, groupTint
             Modifier
                 .fillMaxWidth()
                 .combinedClickable(onClick = { a.openList(l.id) }, onLongClick = { menu = true })
-                .padding(start = indent.dp, end = 20.dp, top = 13.dp, bottom = 13.dp),
+                .padding(start = indent.dp, end = 20.dp, top = vPad, bottom = vPad),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(Icons.AutoMirrored.Outlined.List, null, tint = tint, modifier = Modifier.size(22.dp))
