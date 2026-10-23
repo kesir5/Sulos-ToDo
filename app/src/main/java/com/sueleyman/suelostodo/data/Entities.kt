@@ -37,6 +37,8 @@ data class ListGroup(
     val name: String,
     /** Parent group (only top-level groups can be parents). */
     val parentId: String? = null,
+    /** User-chosen colour as ARGB (0xFFRRGGBB), null = automatic (colour of the first list). */
+    val color: Long? = null,
     val sortOrder: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
     val deleted: Boolean = false,

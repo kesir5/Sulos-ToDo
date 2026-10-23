@@ -1,6 +1,21 @@
 package com.sueleyman.suelostodo.ui
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material3.Slider
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -133,4 +148,85 @@ fun NewGroupDialog(
         dismissButton = { TextButton(onClick = onDismiss) { Text("Abbrechen") } }
     )
     LaunchedEffect(Unit) { runCatching { fr.requestFocus() } }
+}
+
+// ===================================================================== colour picker
+
+/** Presets: the list colours plus a few extra tones. */
+private val PRESETS = longArrayOf(
+    0xFF2564CF, 0xFF0C447C, 0xFF038387, 0xFF3E8A5E, 0xFF639922, 0xFFBA7517,
+    0xFFCA5010, 0xFFC4314B, 0xFFBF4C8A, 0xFF7B5EA7, 0xFF534AB7, 0xFF5D5A58,
+)
+
+private fun hsv(color: Long): FloatArray = FloatArray(3).also { android.graphics.Color.colorToHSV(color.toInt(), it) }
+private fun fromHsv(h: Float, s: Float, v: Float): Long =
+    android.graphics.Color.HSVToColor(floatArrayOf(h, s, v)).toLong() and 0xFFFFFFFFL
+private fun hex(c: Long) = "#%06X".format(c and 0xFFFFFF)
+
+/** Free colour choice for a group: presets, hue/saturation/brightness sliders or hex code. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun GroupColorDialog(name: String, initial: Long?, onDismiss: () -> Unit, onPick: (Long?) -> Unit) {
+    val start = initial ?: PRESETS[0]
+    var h by remember { mutableFloatStateOf(hsv(start)[0]) }
+    var sat by remember { mutableFloatStateOf(hsv(start)[1]) }
+    var v by remember { mutableFloatStateOf(hsv(start)[2]) }
+    val current = fromHsv(h, sat, v)
+    var hexText by remember { mutableStateOf(hex(start)) }
+    fun set(c: Long) { val x = hsv(c); h = x[0]; sat = x[1]; v = x[2]; hexText = hex(c) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Farbe für „$name“") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                // preview
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(44.dp).clip(RoundedCornerShape(12.dp)).background(Color(current)))
+                    Spacer(Modifier.width(12.dp))
+                    Box(
+                        Modifier.weight(1f).clip(RoundedCornerShape(10.dp)).background(Color(current).copy(alpha = 0.16f))
+                            .padding(horizontal = 12.dp, vertical = 10.dp)
+                    ) { Text(name, color = Color(current), fontWeight = FontWeight.SemiBold) }
+                }
+                Spacer(Modifier.size(12.dp))
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    PRESETS.forEach { c ->
+                        Box(
+                            Modifier.size(32.dp).clip(CircleShape).background(Color(c)).clickable { set(c) },
+                            contentAlignment = Alignment.Center
+                        ) { if (c == current) Icon(Icons.Filled.Check, null, tint = Color.White, modifier = Modifier.size(18.dp)) }
+                    }
+                }
+                Spacer(Modifier.size(12.dp))
+                // hue track
+                Box(
+                    Modifier.fillMaxWidth().height(10.dp).clip(RoundedCornerShape(5.dp)).background(
+                        Brush.horizontalGradient((0..6).map { Color(fromHsv(it * 60f % 360f + if (it == 6) 359f else 0f, 1f, 1f)) })
+                    )
+                )
+                Slider(value = h, onValueChange = { h = it; hexText = hex(fromHsv(h, sat, v)) }, valueRange = 0f..359f)
+                Text("Sättigung", style = MaterialTheme.typography.labelSmall)
+                Slider(value = sat, onValueChange = { sat = it; hexText = hex(fromHsv(h, sat, v)) })
+                Text("Helligkeit", style = MaterialTheme.typography.labelSmall)
+                Slider(value = v, onValueChange = { v = it; hexText = hex(fromHsv(h, sat, v)) }, valueRange = 0.2f..1f)
+                OutlinedTextField(
+                    value = hexText, singleLine = true, label = { Text("Hex-Code") },
+                    onValueChange = { t ->
+                        hexText = t
+                        val clean = t.trim().removePrefix("#")
+                        if (clean.length == 6) clean.toLongOrNull(16)?.let { set(0xFF000000L or it); hexText = t }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = { TextButton(onClick = { onPick(current) }) { Text("Übernehmen") } },
+        dismissButton = {
+            Row {
+                TextButton(onClick = { onPick(null) }) { Text("Automatisch") }
+                TextButton(onClick = onDismiss) { Text("Abbrechen") }
+            }
+        }
+    )
 }

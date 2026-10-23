@@ -99,6 +99,12 @@ class Repository(
         changed()
     }
 
+    suspend fun setGroupColor(id: String, color: Long?) {
+        val g = dao.getGroup(id) ?: return
+        dao.upsertGroup(g.copy(color = color, updatedAt = now()))
+        changed()
+    }
+
     suspend fun setGroupExpanded(id: String, expanded: Boolean) {
         dao.setGroupExpanded(id, expanded)
     }

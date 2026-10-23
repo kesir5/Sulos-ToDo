@@ -45,6 +45,7 @@ import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.StarOutline
+import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.SwapVert
 import androidx.compose.material.icons.outlined.WbSunny
 import androidx.compose.material3.DropdownMenu
@@ -101,7 +102,15 @@ private class HomeActions(
     val addList: (ListGroup) -> Unit,
     val dissolve: (ListGroup) -> Unit,
     val moveList: (ListWithCount) -> Unit,
+    val color: (ListGroup) -> Unit,
 )
+
+/** Effective colour of a group: own choice → parent's choice → colour of its first list. */
+private fun GroupNode.tint(parent: Color? = null): Color =
+    group.color?.let { Color(it) } ?: parent ?: listColor(color)
+
+/** Darker variant for text on a light tint. */
+private fun Color.deep(): Color = Color(red = red * 0.7f, green = green * 0.7f, blue = blue * 0.7f)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -117,6 +126,7 @@ fun HomeScreen(onOpenList: (String) -> Unit, onSettings: () -> Unit, onArrange: 
     var dissolve by remember { mutableStateOf<ListGroup?>(null) }
     var moveList by remember { mutableStateOf<ListWithCount?>(null) }
     var newGroupFor by remember { mutableStateOf<ListWithCount?>(null) }
+    var colorFor by remember { mutableStateOf<ListGroup?>(null) }
 
     val actions = HomeActions(
         arrange = onArrange,
@@ -127,13 +137,14 @@ fun HomeScreen(onOpenList: (String) -> Unit, onSettings: () -> Unit, onArrange: 
         addList = { newListIn = it.id },
         dissolve = { dissolve = it },
         moveList = { moveList = it },
+        color = { colorFor = it },
     )
 
     Scaffold(
         containerColor = if (style == HomeStyle.TILES || style == HomeStyle.DASHBOARD)
             MaterialTheme.colorScheme.background else MaterialTheme.colorScheme.surface,
         topBar = {
-            if (style == HomeStyle.GREETING) GreetingHeader(state, userName, onSettings, onArrange)
+            if (style == HomeStyle.GREETING) GreetingHeader(state, userName, onSettings, onArrange, onOpenList)
             else TopAppBar(
                 title = { Text("Sülos ToDo", fontWeight = FontWeight.SemiBold) },
                 actions = {
@@ -167,7 +178,7 @@ fun HomeScreen(onOpenList: (String) -> Unit, onSettings: () -> Unit, onArrange: 
             // ---- smart lists / head area
             when (style) {
                 HomeStyle.TILES -> item { SmartTiles(state, onOpenList) }
-                HomeStyle.GREETING -> item { SmartChips(state, onOpenList) }
+                HomeStyle.GREETING -> item { Spacer(Modifier.height(8.dp)) }
                 HomeStyle.DASHBOARD -> item { DashboardCard(state, onOpenList) }
                 else -> smartRows(state, onOpenList)
             }
@@ -206,6 +217,13 @@ fun HomeScreen(onOpenList: (String) -> Unit, onSettings: () -> Unit, onArrange: 
             groups = state.groups, presetParent = parent.ifEmpty { null },
             onDismiss = { newGroupUnder = null },
             onCreate = { name, p -> newGroupUnder = null; vm.createGroup(name, p) }
+        )
+    }
+    colorFor?.let { g ->
+        GroupColorDialog(
+            name = g.name, initial = g.color,
+            onDismiss = { colorFor = null },
+            onPick = { c -> colorFor = null; vm.setGroupColor(g.id, c) }
         )
     }
     renameGroup?.let { g ->
@@ -291,7 +309,9 @@ private fun SmartTiles(state: HomeState, open: (String) -> Unit) {
 }
 
 @Composable
-private fun GreetingHeader(state: HomeState, name: String, onSettings: () -> Unit, onArrange: () -> Unit) {
+private fun GreetingHeader(
+    state: HomeState, name: String, onSettings: () -> Unit, onArrange: () -> Unit, open: (String) -> Unit,
+) {
     val hour = LocalTime.now().hour
     val hello = when { hour < 11 -> "Guten Morgen"; hour < 18 -> "Guten Tag"; else -> "Guten Abend" }
     Column(
@@ -314,31 +334,22 @@ private fun GreetingHeader(state: HomeState, name: String, onSettings: () -> Uni
             when (state.todayCount) { 0 -> "Heute ist nichts fällig"; 1 -> "1 Aufgabe für heute"; else -> "${state.todayCount} Aufgaben für heute" },
             color = Color.White.copy(alpha = 0.8f), style = MaterialTheme.typography.bodyMedium
         )
-    }
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun SmartChips(state: HomeState, open: (String) -> Unit) {
-    val surface = MaterialTheme.colorScheme.surface
-    FlowRow(
-        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)).padding(12.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        smartItems(state).forEach { s ->
-            Row(
-                Modifier.clip(RoundedCornerShape(18.dp)).background(s.color.copy(alpha = 0.16f).compositeOver(surface))
-                    .clickable { open(s.id) }.padding(horizontal = 12.dp, vertical = 7.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(s.icon, null, tint = s.color, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(6.dp))
-                Text("${s.title}  ${s.count}", color = s.color, style = MaterialTheme.typography.labelLarge)
+        Spacer(Modifier.height(14.dp))
+        // the four smart lists in one row
+        Row(Modifier.padding(end = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            smartItems(state).forEach { s ->
+                Column(
+                    Modifier.weight(1f).clip(RoundedCornerShape(14.dp)).background(Color.White.copy(alpha = 0.14f))
+                        .clickable { open(s.id) }.padding(vertical = 10.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(s.icon, null, tint = Color.White, modifier = Modifier.size(20.dp))
+                    Text("${s.count}", color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text(s.title, color = Color.White.copy(alpha = 0.85f), style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                }
             }
         }
     }
-    Spacer(Modifier.height(8.dp))
 }
 
 @Composable
@@ -402,12 +413,14 @@ private fun Ring(frac: Float, color: Color, size: Dp, stroke: Dp) {
 @Composable
 private fun GroupBlock(node: GroupNode, style: HomeStyle, a: HomeActions) {
     Column(Modifier.animateContentSize()) {
+        val tint = node.tint()
         GroupHeader(node, style, a)
         if (node.group.expanded) {
-            node.lists.forEach { ListNavRow(it, 1, style, node.color, a) }
+            node.lists.forEach { ListNavRow(it, 1, style, tint, a) }
             node.subs.forEach { sub ->
-                GroupHeader(sub, style, a, parentColor = node.color)
-                if (sub.group.expanded) sub.lists.forEach { ListNavRow(it, 2, style, node.color, a) }
+                val subTint = sub.tint(tint)
+                GroupHeader(sub, style, a, parentTint = tint)
+                if (sub.group.expanded) sub.lists.forEach { ListNavRow(it, 2, style, subTint, a) }
             }
         }
     }
@@ -415,11 +428,11 @@ private fun GroupBlock(node: GroupNode, style: HomeStyle, a: HomeActions) {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun GroupHeader(node: GroupNode, style: HomeStyle, a: HomeActions, parentColor: Int? = null) {
+private fun GroupHeader(node: GroupNode, style: HomeStyle, a: HomeActions, parentTint: Color? = null) {
     val g = node.group
     var menu by remember { mutableStateOf(false) }
     val sub = node.depth > 0
-    val accent = listColor(parentColor ?: node.color)
+    val accent = node.tint(parentTint)
     val surface = MaterialTheme.colorScheme.surface
     val variant = MaterialTheme.colorScheme.surfaceVariant
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
@@ -439,7 +452,7 @@ private fun GroupHeader(node: GroupNode, style: HomeStyle, a: HomeActions, paren
         when (style) {
             HomeStyle.ACCENT -> {
                 val bg = if (sub) Color.Transparent else accent.copy(alpha = 0.14f).compositeOver(surface)
-                val fg = accent.copy(alpha = 1f).let { c -> Color(red = c.red * 0.75f, green = c.green * 0.75f, blue = c.blue * 0.75f) }
+                val fg = accent.deep()
                 Row(
                     Modifier.fillMaxWidth().padding(start = if (sub) 14.dp else 0.dp, top = if (sub) 0.dp else 3.dp)
                         .height(IntrinsicSize.Min).background(bg).then(click),
@@ -457,25 +470,26 @@ private fun GroupHeader(node: GroupNode, style: HomeStyle, a: HomeActions, paren
                 }
             }
             HomeStyle.GREETING -> {
+                val fg = accent.deep()
                 if (!sub) Row(
                     Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 3.dp).clip(RoundedCornerShape(24.dp))
-                        .background(variant).then(click).padding(start = 12.dp, end = 4.dp),
+                        .background(accent.copy(alpha = 0.18f).compositeOver(surface)).then(click).padding(start = 12.dp, end = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    chevron(muted)
+                    chevron(fg)
                     Spacer(Modifier.width(8.dp))
-                    Text(g.name, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyLarge,
+                    Text(g.name, color = fg, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyLarge,
                         modifier = Modifier.weight(1f).padding(vertical = 11.dp))
-                    Text("${node.open}", style = MaterialTheme.typography.labelLarge,
-                        modifier = Modifier.clip(RoundedCornerShape(10.dp)).background(surface).padding(horizontal = 8.dp, vertical = 2.dp))
-                    menuButton(muted)
+                    Text("${node.open}", color = Color.White, style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.clip(RoundedCornerShape(10.dp)).background(accent).padding(horizontal = 8.dp, vertical = 2.dp))
+                    menuButton(fg)
                 } else Row(
                     Modifier.fillMaxWidth().then(click).padding(start = 34.dp, end = 14.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(if (g.expanded) Icons.Outlined.FolderOpen else Icons.Outlined.Folder, null, tint = muted, modifier = Modifier.size(18.dp))
+                    Icon(if (g.expanded) Icons.Outlined.FolderOpen else Icons.Outlined.Folder, null, tint = accent, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text(g.name, color = muted, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f).padding(vertical = 10.dp))
+                    Text(g.name, color = fg, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f).padding(vertical = 10.dp))
                     if (!g.expanded && node.open > 0) Text("${node.open}", color = muted, style = MaterialTheme.typography.bodySmall)
                     menuButton(muted)
                 }
@@ -548,7 +562,7 @@ private fun GroupCard(node: GroupNode, a: HomeActions) {
                         .padding(start = 14.dp, end = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Box(Modifier.size(10.dp).clip(CircleShape).background(listColor(node.color)))
+                    Box(Modifier.size(10.dp).clip(CircleShape).background(node.tint()))
                     Spacer(Modifier.width(10.dp))
                     Text(g.name, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyLarge,
                         modifier = Modifier.weight(1f).padding(vertical = 12.dp))
@@ -595,6 +609,8 @@ private fun GroupMenu(g: ListGroup, expanded: Boolean, a: HomeActions, onDismiss
             onClick = { onDismiss(); a.rename(g) })
         DropdownMenuItem(text = { Text("Liste hinzufügen") }, leadingIcon = { Icon(Icons.Filled.Add, null) },
             onClick = { onDismiss(); a.addList(g) })
+        DropdownMenuItem(text = { Text("Farbe wählen") }, leadingIcon = { Icon(Icons.Outlined.Palette, null) },
+            onClick = { onDismiss(); a.color(g) })
         if (g.parentId == null) DropdownMenuItem(
             text = { Text("Untergruppe anlegen") }, leadingIcon = { Icon(Icons.Outlined.CreateNewFolder, null) },
             onClick = { onDismiss(); a.addSub(g) })
@@ -611,10 +627,11 @@ private fun GroupMenu(g: ListGroup, expanded: Boolean, a: HomeActions, onDismiss
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ListNavRow(l: ListWithCount, depth: Int, style: HomeStyle, groupColor: Int?, a: HomeActions) {
+private fun ListNavRow(l: ListWithCount, depth: Int, style: HomeStyle, groupTint: Color?, a: HomeActions) {
     var menu by remember { mutableStateOf(false) }
     // style 3 and 5 tint the lists in the group colour
-    val tint = listColor(if ((style == HomeStyle.ACCENT || style == HomeStyle.DASHBOARD) && groupColor != null) groupColor else l.color)
+    val tint = if (groupTint != null && (style == HomeStyle.ACCENT || style == HomeStyle.DASHBOARD || style == HomeStyle.GREETING))
+        groupTint else listColor(l.color)
     val indent = when (style) {
         HomeStyle.TILES -> 14 + depth * 16
         HomeStyle.ACCENT -> 18 + depth * 18
