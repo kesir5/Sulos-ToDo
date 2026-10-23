@@ -33,6 +33,13 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.zIndex
+import sh.calvin.reorderable.ReorderableItem
+import sh.calvin.reorderable.rememberReorderableLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -62,6 +69,7 @@ import androidx.compose.material.icons.outlined.SubdirectoryArrowRight
 import androidx.compose.material.icons.outlined.UnfoldLess
 import androidx.compose.material.icons.outlined.UnfoldMore
 import androidx.compose.material.icons.outlined.WbSunny
+import androidx.compose.material.icons.outlined.SwapVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -114,6 +122,9 @@ import com.sueleyman.suelostodo.data.TaskList
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+
+/** Builds the long-press-drag modifier of a row; the callback is invoked for a long press without moving. */
+typealias DragHook = (onLongPressNoMove: () -> Unit) -> Modifier
 
 /** Callbacks shared by all row designs. */
 class RowActions(
@@ -174,6 +185,12 @@ fun ListScreen(
     var deleteTask by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(h) { if (h != null && !h.exists) onBack() }
+    var sorting by rememberSaveable { mutableStateOf(false) }
+    if (sorting && !isSmart) {
+        androidx.activity.compose.BackHandler { sorting = false }
+        SortMode(vm, h?.title ?: "", accent) { sorting = false }
+        return
+    }
 
     val ctx = RowCtx(
         style = style, accent = accent, tree = !isSmart,
@@ -192,6 +209,46 @@ fun ListScreen(
     )
     val grouped = !isSmart && (style == TaskStyle.GROUPS || style == TaskStyle.RING)
 
+    // ---------- drag & drop by long press
+    val lazyState = rememberLazyListState()
+    val haptic = LocalHapticFeedback.current
+    var draggingId by remember { mutableStateOf<String?>(null) }
+    var moved by remember { mutableStateOf(false) }
+    var dragRows by remember { mutableStateOf(state.openRows) }
+    var dragGroups by remember { mutableStateOf(state.openGroups) }
+    LaunchedEffect(state.openRows) { if (draggingId == null) { dragRows = state.openRows; dragGroups = state.openGroups } }
+    val reorderState = rememberReorderableLazyListState(lazyState) { from, to ->
+        val fk = from.key as? String ?: return@rememberReorderableLazyListState
+        val tk = to.key as? String ?: return@rememberReorderableLazyListState
+        if (grouped) {
+            val f = dragGroups.indexOfFirst { "o" + it.first().task.id == fk }
+            val t = dragGroups.indexOfFirst { "o" + it.first().task.id == tk }
+            if (f >= 0 && t >= 0) { dragGroups = dragGroups.toMutableList().apply { add(t, removeAt(f)) }; moved = true }
+        } else {
+            val f = dragRows.indexOfFirst { "o" + it.task.id == fk }
+            val t = dragRows.indexOfFirst { "o" + it.task.id == tk }
+            if (f >= 0 && t >= 0) { dragRows = dragRows.toMutableList().apply { add(t, removeAt(f)) }; moved = true }
+        }
+    }
+    val startDrag: (String) -> Unit = { id ->
+        draggingId = id; moved = false
+        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+    }
+    val endDrag: (() -> Unit) -> Unit = { noMove ->
+        val id = draggingId
+        draggingId = null
+        if (!moved) noMove()                       // long press without moving -> context menu
+        else if (id != null) {
+            // new order of the dragged entry's siblings (children follow their parent automatically)
+            val ids = if (grouped) dragGroups.map { it.first().task.id }
+            else {
+                val parent = dragRows.firstOrNull { it.task.id == id }?.task?.parentId
+                dragRows.map { it.task }.filter { it.parentId == parent }.map { it.id }
+            }
+            vm.reorder(ids)
+        }
+    }
+
     Scaffold(
         containerColor = bg,
         topBar = {
@@ -207,6 +264,9 @@ fun ListScreen(
                     if (!isSmart) {
                         val parents = (state.openRows + state.doneRows).filter { it.hasChildren }
                         val allExpanded = parents.isNotEmpty() && parents.all { it.task.expanded }
+                        IconButton(onClick = { sorting = true }) {
+                            Icon(androidx.compose.material.icons.Icons.Outlined.SwapVert, "Einträge sortieren")
+                        }
                         if (parents.isNotEmpty()) IconButton(onClick = {
                             parents.forEach { vm.setExpanded(it.task.id, !allExpanded) }
                         }) {
@@ -243,18 +303,39 @@ fun ListScreen(
         bottomBar = { AddTaskBar(autoAdd, accent, colored) { vm.addTask(it) } }
     ) { pad ->
         LazyColumn(
+            state = lazyState,
             modifier = Modifier.fillMaxSize().padding(pad),
             contentPadding = PaddingValues(bottom = 24.dp)
         ) {
             item(key = "header") { ListHeaderBlock(style, h?.title ?: "", accent, onHeader, headerBlock, vm.smart, state) }
 
             if (grouped) {
-                items(state.openGroups, key = { "o" + it.first().task.id }) { g ->
-                    GroupCard(g, ctx, Modifier.animateItem())
+                items(dragGroups, key = { "o" + it.first().task.id }) { g ->
+                    ReorderableItem(reorderState, key = "o" + g.first().task.id, enabled = !isSmart) { isDragging ->
+                        val scope = this
+                        GroupCard(
+                            g, ctx, Modifier.dragLook(isDragging),
+                            drag = if (isSmart) null else { noMove ->
+                                with(scope) { Modifier.longPressDraggableHandle(
+                                    onDragStarted = { startDrag(g.first().task.id) },
+                                    onDragStopped = { endDrag(noMove) }) }
+                            }
+                        )
+                    }
                 }
             } else {
-                items(state.openRows, key = { "o" + it.task.id }) { row ->
-                    FlatRow(row, ctx, Modifier.animateItem())
+                items(dragRows, key = { "o" + it.task.id }) { row ->
+                    ReorderableItem(reorderState, key = "o" + row.task.id, enabled = !isSmart) { isDragging ->
+                        val scope = this
+                        FlatRow(
+                            row, ctx, Modifier.dragLook(isDragging),
+                            drag = if (isSmart) null else { noMove ->
+                                with(scope) { Modifier.longPressDraggableHandle(
+                                    onDragStarted = { startDrag(row.task.id) },
+                                    onDragStopped = { endDrag(noMove) }) }
+                            }
+                        )
+                    }
                 }
             }
 
@@ -469,7 +550,7 @@ fun ExpandToggle(row: TreeRow, ctx: RowCtx, small: Boolean = false) {
  * Long press opens the context menu.
  */
 @Composable
-fun Modifier.splitTap(row: TreeRow, ctx: RowCtx, onLongPress: () -> Unit): Modifier {
+fun Modifier.splitTap(row: TreeRow, ctx: RowCtx, menuOnLongPress: Boolean = true, onLongPress: () -> Unit): Modifier {
     val r by rememberUpdatedState(row)
     val c by rememberUpdatedState(ctx)
     val long by rememberUpdatedState(onLongPress)
@@ -484,7 +565,8 @@ fun Modifier.splitTap(row: TreeRow, ctx: RowCtx, onLongPress: () -> Unit): Modif
                     val released = tryAwaitRelease()
                     interaction.emit(if (released) PressInteraction.Release(press) else PressInteraction.Cancel(press))
                 },
-                onLongPress = { long() },
+                // when the row is draggable, long press starts the drag; the menu opens on release without moving
+                onLongPress = { if (menuOnLongPress) long() },
                 onTap = { off ->
                     if (r.hasChildren && c.tree && off.x < size.width / 2f) c.actions.toggleExpand(r.task)
                     else c.actions.open(r.task.id)
@@ -493,11 +575,17 @@ fun Modifier.splitTap(row: TreeRow, ctx: RowCtx, onLongPress: () -> Unit): Modif
         }
 }
 
+/** Slight lift while an entry is dragged. */
 @Composable
-private fun RowMenuBox(row: TreeRow, ctx: RowCtx, modifier: Modifier, content: @Composable (Modifier) -> Unit) {
+private fun Modifier.dragLook(dragging: Boolean): Modifier =
+    this.then(if (dragging) Modifier.shadow(8.dp, RoundedCornerShape(8.dp)).zIndex(1f) else Modifier)
+
+@Composable
+private fun RowMenuBox(row: TreeRow, ctx: RowCtx, modifier: Modifier, drag: DragHook?, content: @Composable (Modifier) -> Unit) {
     var menu by remember { mutableStateOf(false) }
     Box(modifier) {
-        content(Modifier.splitTap(row, ctx) { menu = true })
+        val dragMod = drag?.invoke { menu = true } ?: Modifier
+        content(Modifier.splitTap(row, ctx, menuOnLongPress = drag == null) { menu = true }.then(dragMod))
         TaskContextMenu(row.task, ctx, menu) { menu = false }
     }
 }
@@ -525,7 +613,7 @@ private fun TaskContextMenu(t: Task, ctx: RowCtx, expanded: Boolean, onDismiss: 
 }
 
 @Composable
-private fun FlatRow(row: TreeRow, ctx: RowCtx, modifier: Modifier) {
+private fun FlatRow(row: TreeRow, ctx: RowCtx, modifier: Modifier, drag: DragHook? = null) {
     val t = row.task
     val depth = if (ctx.tree) t.depth else 0
     when (ctx.style) {
@@ -533,7 +621,7 @@ private fun FlatRow(row: TreeRow, ctx: RowCtx, modifier: Modifier) {
             // GROUPS/RING only reach here for smart lists -> card look
             val surface = MaterialTheme.colorScheme.surface
             val cardColor = if (depth == 0) surface else ctx.accent.copy(alpha = 0.10f).compositeOver(surface)
-            RowMenuBox(row, ctx, modifier.padding(start = 10.dp + (depth * 22).dp, end = 10.dp, top = 2.dp, bottom = 2.dp)) { click ->
+            RowMenuBox(row, ctx, modifier.padding(start = 10.dp + (depth * 22).dp, end = 10.dp, top = 2.dp, bottom = 2.dp), drag) { click ->
                 Surface(
                     shape = RoundedCornerShape(if (ctx.style == TaskStyle.CLASSIC) 8.dp else 12.dp),
                     color = cardColor,
@@ -555,7 +643,7 @@ private fun FlatRow(row: TreeRow, ctx: RowCtx, modifier: Modifier) {
         TaskStyle.TREE -> {
             val line = ctx.accent.copy(alpha = 0.45f)
             val divider = MaterialTheme.colorScheme.outlineVariant
-            RowMenuBox(row, ctx, modifier) { click ->
+            RowMenuBox(row, ctx, modifier, drag) { click ->
                 Row(
                     Modifier
                         .fillMaxWidth()
@@ -582,7 +670,7 @@ private fun FlatRow(row: TreeRow, ctx: RowCtx, modifier: Modifier) {
 
         TaskStyle.OUTLINER -> {
             val guide = MaterialTheme.colorScheme.outlineVariant
-            RowMenuBox(row, ctx, modifier) { click ->
+            RowMenuBox(row, ctx, modifier, drag) { click ->
                 Row(
                     Modifier
                         .fillMaxWidth()
@@ -609,7 +697,7 @@ private fun FlatRow(row: TreeRow, ctx: RowCtx, modifier: Modifier) {
 
         TaskStyle.STRIPES -> {
             val stripe = ctx.accent.copy(alpha = when (depth) { 0 -> 1f; 1 -> 0.55f; else -> 0.3f })
-            RowMenuBox(row, ctx, modifier.padding(start = 10.dp + (depth * 14).dp, end = 10.dp, top = 2.dp, bottom = 2.dp)) { click ->
+            RowMenuBox(row, ctx, modifier.padding(start = 10.dp + (depth * 14).dp, end = 10.dp, top = 2.dp, bottom = 2.dp), drag) { click ->
                 Surface(
                     color = MaterialTheme.colorScheme.surface,
                     border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
@@ -633,7 +721,7 @@ private fun FlatRow(row: TreeRow, ctx: RowCtx, modifier: Modifier) {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun GroupCard(group: List<TreeRow>, ctx: RowCtx, modifier: Modifier) {
+private fun GroupCard(group: List<TreeRow>, ctx: RowCtx, modifier: Modifier, drag: DragHook? = null) {
     val root = group.first()
     val t = root.task
     val ring = ctx.style == TaskStyle.RING
@@ -649,7 +737,8 @@ private fun GroupCard(group: List<TreeRow>, ctx: RowCtx, modifier: Modifier) {
                 Row(
                     Modifier
                         .fillMaxWidth()
-                        .splitTap(root, ctx) { menu = true }
+                        .splitTap(root, ctx, menuOnLongPress = drag == null) { menu = true }
+                        .then(drag?.invoke { menu = true } ?: Modifier)
                         .padding(start = 4.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {

@@ -23,11 +23,17 @@ class WidgetRenderTest {
         val l = repo.createListInGroup("Bucket", 2, g)
         val t = repo.addTask(l, "Fallschirm")!!
         repo.addTask(l, "Unteraufgabe", t)
+        val t2 = repo.addTask(l, "Nordlichter")!!
+        // manual order: move "Nordlichter" up -> becomes first
+        repo.moveAmongSiblings(t2, -1)
+        val order = repo.getTasksOfList(l).filter { it.parentId == null }.sortedBy { it.sortOrder }.map { it.title }
+        org.junit.Assert.assertEquals(listOf("Nordlichter", "Fallschirm"), order)
+        WidgetPrefs.setMoving(42, t)
         repo.addTask("inbox", "Einkauf")
         val data = repo.widgetData()
         val parent = FrameLayout(ctx)
         val sels = WidgetLayout.entries.map { WidgetSel("group:$g", it.key, false) } +
-            WidgetSel("group:$g", "light", true) + WidgetSel("smart:due", "compact", false)
+            WidgetSel("group:$g", "light", true) + WidgetSel("smart:due", "levels", false)
         for (sel in sels) {
             WidgetPrefs.update(ctx, 42) { sel }
             TaskWidget.buildRoot(ctx, 42, data, sel).apply(ctx, parent)

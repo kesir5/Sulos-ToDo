@@ -238,6 +238,10 @@ class GraphClient(private val token: String, private val onRetry: RetryListener?
 
     suspend fun bytes(url: String): ByteArray = withNetRetry(onRetry) { exec(req(url).get().build()).use { it.body!!.bytes() } }
 
+    suspend fun patch(url: String, body: JsonObject) {
+        exec(req(url).patch(body.toString().toRequestBody("application/json".toMediaType())).build()).close()
+    }
+
     suspend fun post(url: String, body: JsonObject): JsonObject =
         exec(req(url).post(body.toString().toRequestBody("application/json".toMediaType())).build())
             .use { r -> r.body!!.string().let { if (it.isBlank()) JsonObject(emptyMap()) else json.parseToJsonElement(it).jsonObject } }

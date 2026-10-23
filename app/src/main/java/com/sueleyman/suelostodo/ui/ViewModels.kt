@@ -260,6 +260,9 @@ class ListViewModel(val listId: String) : ViewModel() {
     fun move(id: String, target: String) = viewModelScope.launch { repo.moveTask(id, target) }
     fun renameList(name: String, color: Int?) = viewModelScope.launch { repo.updateList(listId, name, color) }
     fun deleteList() = viewModelScope.launch { repo.deleteList(listId) }
+    /** raw tasks of this list for the sort mode */
+    val listTasks: Flow<List<Task>> = if (smart != null) flowOf(emptyList()) else repo.observeTasksOfList(listId)
+    fun reorder(ids: List<String>) = viewModelScope.launch { repo.reorder(ids) }
     val groups = repo.observeGroups()
     val groupId = repo.observeList(listId).map { it?.groupId }
     fun moveToGroup(groupId: String?) = viewModelScope.launch { repo.moveListToGroup(listId, groupId) }

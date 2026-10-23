@@ -70,6 +70,22 @@ object TaskWidget {
     const val PICKER_TIMEOUT_MS = 15_000L
     private val pickerTokens = java.util.concurrent.ConcurrentHashMap<Int, Long>()
 
+    private val moveTokens = java.util.concurrent.ConcurrentHashMap<Int, Long>()
+
+    /** Move mode ends by itself after 15 s without tapping ▲/▼. */
+    fun scheduleMoveTimeout(c: Context, id: Int) {
+        val app = c.applicationContext as SuelosToDoApp
+        val token = System.nanoTime()
+        moveTokens[id] = token
+        app.appScope.launch {
+            kotlinx.coroutines.delay(PICKER_TIMEOUT_MS)
+            if (moveTokens[id] == token && WidgetPrefs.movingTask(id) != null) {
+                WidgetPrefs.setMoving(id, null)
+                runCatching { update(app, id) }
+            }
+        }
+    }
+
     fun schedulePickerTimeout(c: Context, id: Int) {
         val app = c.applicationContext as SuelosToDoApp
         val token = System.nanoTime()
@@ -115,7 +131,7 @@ object TaskWidget {
             sel.picker -> { bg = WHITE; titleColor = INK; subColor = INK2; plusBg = 0xFFF1F0EC.toInt(); plusFg = INK }
             layout.dark -> { bg = accent.toInt(); titleColor = WHITE; subColor = DIM; plusBg = 0x33FFFFFF; plusFg = WHITE }
             layout == WidgetLayout.LIGHT || layout == WidgetLayout.ZEBRA -> { bg = WHITE; titleColor = WHITE; subColor = DIM; plusBg = 0x33FFFFFF; plusFg = WHITE; headBg = true }
-            layout == WidgetLayout.COMPACT || layout == WidgetLayout.LINES || layout == WidgetLayout.LEVELS ->
+            layout == WidgetLayout.LINES || layout == WidgetLayout.LEVELS ->
                 { bg = WHITE; titleColor = INK; subColor = INK2; plusBg = (0x2E000000L or (accent and 0xFFFFFF)).toInt(); plusFg = deep(accent) }
             layout == WidgetLayout.TILES -> { bg = 0xFFF1ECE8.toInt(); titleColor = deep(accent); subColor = INK2; plusBg = accent.toInt(); plusFg = WHITE }
             else -> { bg = 0xFFFBF8F6.toInt(); titleColor = deep(accent); subColor = INK2; plusBg = accent.toInt(); plusFg = WHITE }
@@ -170,7 +186,7 @@ object TaskWidget {
         }
 
         // ---------- compact counters
-        val showCounters = !sel.picker && layout == WidgetLayout.COMPACT
+        val showCounters = false // "Kompakt mit Zählern" removed
         rv.setViewVisibility(R.id.w_counters, if (showCounters) View.VISIBLE else View.GONE)
         if (showCounters) {
             val all = v.sections.flatMap { it.rows }.filter { it.task.depth == 0 }
@@ -257,9 +273,6 @@ fun widgetItems(sel: WidgetSel, d: WidgetData): List<WItem> {
     }
     val v = buildWidgetView(sel.source, d)
     return when (WidgetLayout.of(sel.layout)) {
-        WidgetLayout.COMPACT -> v.sections.flatMap { s -> s.rows.filter { it.task.depth == 0 }.map { it to s.color } }
-            .sortedWith(compareBy({ it.first.task.dueDate ?: Long.MAX_VALUE }, { if (it.first.task.important) 0 else 1 }))
-            .take(6).map { (r, c) -> WItem.Row(r.copy(hasChildren = false), c, true) }
         else -> v.sections.flatMap { s ->
             (if (s.title != null) listOf(WItem.Section(s.title, s.color, s.listId)) else emptyList()) + s.rows.map { WItem.Row(it, s.color, false) }
         }
@@ -285,6 +298,7 @@ class WidgetListService : RemoteViewsService() {
 class WidgetFactory(private val c: Context, private val widgetId: Int) : RemoteViewsService.RemoteViewsFactory {
     private var items: List<WItem> = emptyList()
     private var sel = WidgetSel()
+    private var listColors: Map<String, Long> = emptyMap()
 
     override fun onCreate() {}
     override fun onDestroy() {}
@@ -292,6 +306,7 @@ class WidgetFactory(private val c: Context, private val widgetId: Int) : RemoteV
         sel = WidgetPrefs.get(c, widgetId)
         val data = runCatching { runBlocking { (c.applicationContext as SuelosToDoApp).repo.widgetData() } }.getOrElse { WidgetData() }
         items = widgetItems(sel, data)
+        listColors = data.lists.associate { it.id to ListColors.argb(it.color) }
     }
 
     override fun getCount() = items.size
@@ -364,6 +379,10 @@ class WidgetFactory(private val c: Context, private val widgetId: Int) : RemoteV
                 setViewPadding(R.id.i_row, 12 + indent, 0, 12, 0)
                 // ---- separation per layout
                 when (layout) {
+                    WidgetLayout.COLOR -> {
+                        setViewVisibility(R.id.i_div2, View.VISIBLE)
+                        setInt(R.id.i_div2, "setBackgroundColor", 0x4DFFFFFF)
+                    }
                     WidgetLayout.LINES -> {
                         setViewVisibility(R.id.i_div, View.VISIBLE)
                         setInt(R.id.i_div, "setBackgroundColor", 0xFFE7E5E0.toInt())
@@ -374,15 +393,42 @@ class WidgetFactory(private val c: Context, private val widgetId: Int) : RemoteV
                     }
                     WidgetLayout.ZEBRA -> setInt(R.id.i_row, "setBackgroundColor", if (rowIndex % 2 == 1) 0xFFF4F2EF.toInt() else WHITE)
                     WidgetLayout.LEVELS -> {
+                        // side bars always in the colour of the task's own list
+                        val listCol = (listColors[t.listId] ?: it.color).toInt()
                         val tint = when (t.depth) { 0 -> 0x24; 1 -> 0x10; else -> 0x00 }
-                        val bgc = blend(WHITE, accent, tint)
+                        val bgc = blend(WHITE, listCol, tint)
                         setInt(R.id.i_wrap, "setBackgroundColor", bgc)
                         setViewVisibility(R.id.i_bar, View.VISIBLE)
-                        setInt(R.id.i_bar, "setBackgroundColor", (when (t.depth) { 0 -> 0xFF; 1 -> 0x99; else -> 0x55 } shl 24) or (accent and 0xFFFFFF))
+                        setInt(R.id.i_bar, "setBackgroundColor", (when (t.depth) { 0 -> 0xFF; 1 -> 0x99; else -> 0x66 } shl 24) or (listCol and 0xFFFFFF))
+                        setInt(R.id.i_check, "setColorFilter", listCol)
+                        setInt(R.id.i_star, "setColorFilter", listCol)
+                        // 2 dp line between the entries
+                        setViewVisibility(R.id.i_div2, View.VISIBLE)
+                        setInt(R.id.i_div2, "setBackgroundColor", blend(WHITE, listCol, 0x55))
                         setViewPadding(R.id.i_row, 0, 0, 12, 0)
                         setViewPadding(R.id.i_wrap, indent / 2, if (t.depth == 0 && rowIndex > 0) 6 else 0, 0, 0)
                     }
                     else -> {}
+                }
+                // ---- move mode via the handle at the right edge (widgets cannot do real drag & drop)
+                val canMove = sel.source.startsWith("list:") || sel.source.startsWith("group:")
+                val moving = canMove && WidgetPrefs.movingTask(widgetId) == t.id
+                val handleTint = if (dark) WHITE else INK2
+                setViewVisibility(R.id.i_handle, if (canMove) View.VISIBLE else View.GONE)
+                setViewVisibility(R.id.i_up, if (moving) View.VISIBLE else View.GONE)
+                setViewVisibility(R.id.i_down, if (moving) View.VISIBLE else View.GONE)
+                if (canMove) {
+                    setImageViewResource(R.id.i_handle, if (moving) R.drawable.ic_done_w else R.drawable.ic_drag)
+                    setInt(R.id.i_handle, "setColorFilter", if (moving) accent else handleTint)
+                    setInt(R.id.i_handle, "setImageAlpha", if (moving) 255 else 140)
+                    setOnClickFillInIntent(R.id.i_handle, Intent().putExtra(EXTRA_OP, if (moving) "move_end" else "move_start").putExtra(EXTRA_TASK, t.id))
+                }
+                if (moving) {
+                    setInt(R.id.i_up, "setColorFilter", if (dark) WHITE else accent)
+                    setInt(R.id.i_down, "setColorFilter", if (dark) WHITE else accent)
+                    setOnClickFillInIntent(R.id.i_up, Intent().putExtra(EXTRA_OP, "move_up").putExtra(EXTRA_TASK, t.id))
+                    setOnClickFillInIntent(R.id.i_down, Intent().putExtra(EXTRA_OP, "move_down").putExtra(EXTRA_TASK, t.id))
+                    setInt(R.id.i_row, "setBackgroundColor", if (dark) 0x33FFFFFF else blend(WHITE, accent, 0x30))
                 }
                 setOnClickFillInIntent(R.id.i_check, Intent().putExtra(EXTRA_OP, "toggle").putExtra(EXTRA_TASK, t.id))
                 setOnClickFillInIntent(R.id.i_title, Intent().putExtra(EXTRA_OP, "open").putExtra(EXTRA_TASK, t.id))
@@ -450,6 +496,24 @@ class WidgetActionActivity : Activity() {
                 WidgetPrefs.update(app, id) { it.copy(layout = l) }
                 app.appScope.launch { runCatching { TaskWidget.update(app, id) } }
                 TaskWidget.schedulePickerTimeout(app, id)
+            }
+            "move_start" -> intent.getStringExtra(EXTRA_TASK)?.let { t ->
+                WidgetPrefs.setMoving(id, t)
+                TaskWidget.scheduleMoveTimeout(app, id)
+                app.appScope.launch { runCatching { TaskWidget.update(app, id) } }
+            }
+            "move_end" -> {
+                WidgetPrefs.setMoving(id, null)
+                app.appScope.launch { runCatching { TaskWidget.update(app, id) } }
+            }
+            "move_up", "move_down" -> intent.getStringExtra(EXTRA_TASK)?.let { t ->
+                TaskWidget.scheduleMoveTimeout(app, id)
+                app.appScope.launch {
+                    runCatching {
+                        app.repo.moveAmongSiblings(t, if (intent.getStringExtra(EXTRA_OP) == "move_up") -1 else 1)
+                        TaskWidget.update(app, id)
+                    }
+                }
             }
             "openlist" -> intent.getStringExtra(EXTRA_SOURCE)?.let { lid ->
                 startActivity(

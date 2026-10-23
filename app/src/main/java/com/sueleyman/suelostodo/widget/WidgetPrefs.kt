@@ -29,6 +29,11 @@ object WidgetPrefs {
     fun fontScale(c: Context): Float = sp(c).getFloat("font_scale", 1.0f)
     fun setFontScale(c: Context, v: Float) = sp(c).edit().putFloat("font_scale", v).apply()
 
+    /** Task currently in move mode per widget (in memory only). */
+    private val moving = java.util.concurrent.ConcurrentHashMap<Int, String>()
+    fun movingTask(id: Int): String? = moving[id]
+    fun setMoving(id: Int, taskId: String?) { if (taskId == null) moving.remove(id) else moving[id] = taskId }
+
     fun get(c: Context, id: Int): WidgetSel = state.value[id] ?: load(c, id)
 
     private fun load(c: Context, id: Int): WidgetSel {

@@ -64,6 +64,8 @@ In der App: Einstellungen → „Mit Google Drive verbinden“.
 
 Bei Firmenkonten kann eine Admin-Zustimmung nötig sein; persönliche Konten (outlook.com/hotmail) funktionieren direkt.
 
+**Markierte E-Mails:** Unter Import & Export → Microsoft To Do lässt sich „Markierte E-Mails abrufen“ einschalten. Mit Fähnchen markierte Outlook-Mails landen dann automatisch (stündlich und beim App-Start) in der Liste „Markierte E-Mails“; abhaken markiert sie in Outlook als erledigt. Dafür reicht die bestehende Berechtigung `Tasks.ReadWrite`.
+
 Abbildung der Ebenen: Aufgabe → To-Do-Aufgabe, Unteraufgabe → Schritt, Unter-Unteraufgabe → Schritt mit „↳“.
 Beim Import werden Schritte zu Unteraufgaben; erneuter Import aktualisiert statt zu verdoppeln. Anhänge > 3 MB werden nicht zu Microsoft hochgeladen.
 

@@ -57,6 +57,34 @@
             android:layout_marginStart="4dp"
             android:src="@drawable/ic_star"
             android:contentDescription="Wichtig" />
+
+        <ImageView
+            android:id="@+id/i_up"
+            android:layout_width="30dp"
+            android:layout_height="34dp"
+            android:padding="4dp"
+            android:src="@drawable/ic_up"
+            android:visibility="gone"
+            android:contentDescription="Nach oben" />
+
+        <ImageView
+            android:id="@+id/i_down"
+            android:layout_width="30dp"
+            android:layout_height="34dp"
+            android:padding="4dp"
+            android:src="@drawable/ic_down"
+            android:visibility="gone"
+            android:contentDescription="Nach unten" />
+
+        <ImageView
+            android:id="@+id/i_handle"
+            android:layout_width="30dp"
+            android:layout_height="34dp"
+            android:paddingStart="8dp"
+            android:paddingTop="9dp"
+            android:paddingBottom="9dp"
+            android:src="@drawable/ic_drag"
+            android:contentDescription="Verschieben" />
     </LinearLayout>
 
     <FrameLayout
@@ -64,6 +92,12 @@
         android:layout_width="match_parent"
         android:layout_height="1dp"
         android:background="#FFE7E5E0"
+        android:visibility="gone" />
+
+    <FrameLayout
+        android:id="@+id/i_div2"
+        android:layout_width="match_parent"
+        android:layout_height="2dp"
         android:visibility="gone" />
 
     <FrameLayout

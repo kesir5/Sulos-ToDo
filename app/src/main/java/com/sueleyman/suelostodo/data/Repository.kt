@@ -43,6 +43,7 @@ class Repository(
         dao.getLists(), dao.getGroups(), dao.getOpenTasks(), loaded = true
     )
     suspend fun getTask(id: String) = dao.getTask(id)
+    suspend fun getTasksOfList(listId: String) = dao.getTasksOfList(listId)
 
     suspend fun ensureInbox() {
         dao.insertListIfAbsent(TaskList(id = INBOX_ID, name = "Aufgaben", color = 0, sortOrder = 0, updatedAt = 0))
@@ -232,6 +233,30 @@ class Repository(
     private suspend fun moveRecursive(t: Task, listId: String) {
         dao.upsertTask(t.copy(listId = listId, updatedAt = now()))
         dao.getChildren(t.id).forEach { moveRecursive(it, listId) }
+    }
+
+    // ---------- manual order ----------
+    /** Saves the given order (ids of siblings, top to bottom). */
+    suspend fun reorder(ids: List<String>) {
+        val base = System.currentTimeMillis() - ids.size * 1000L
+        ids.forEachIndexed { i, id ->
+            dao.getTask(id)?.let { t ->
+                val order = base + i * 1000L
+                if (t.sortOrder != order) dao.upsertTask(t.copy(sortOrder = order, updatedAt = now()))
+            }
+        }
+        changed()
+    }
+
+    /** Moves an open task one position up (-1) or down (+1) among its open siblings. */
+    suspend fun moveAmongSiblings(id: String, delta: Int) {
+        val t = dao.getTask(id) ?: return
+        val siblings = dao.getTasksOfList(t.listId).filter { it.parentId == t.parentId && !it.done }.sortedBy { it.sortOrder }
+        val i = siblings.indexOfFirst { it.id == id }
+        val j = i + delta
+        if (i < 0 || j !in siblings.indices) return
+        val ids = siblings.map { it.id }.toMutableList().apply { add(j, removeAt(i)) }
+        reorder(ids)
     }
 
     // ---------- attachments ----------

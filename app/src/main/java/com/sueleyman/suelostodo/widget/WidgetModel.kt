@@ -12,19 +12,19 @@ import java.time.LocalDate
 enum class WidgetLayout(val key: String, val title: String, val description: String) {
     COLOR("color", "1 · Farbfläche", "Ganze Fläche in der Gruppenfarbe, weiße Schrift"),
     LIGHT("light", "2 · Hell mit Farbkopf", "Weiße Karte, farbiger Kopfbalken, Fälligkeit rechts"),
-    COMPACT("compact", "3 · Kompakt mit Zählern", "Zähler oben, dringendste Aufgaben einzeilig – für kleine Widgets"),
-    LINES("lines", "4 · Trennlinien", "Weiß, feine Linie zwischen allen Einträgen"),
-    ZEBRA("zebra", "5 · Zebra", "Zeilen abwechselnd weiß / hellgrau, farbiger Kopf"),
-    TILES("tiles", "6 · Kachelzeilen", "Jeder Eintrag als eigene Kachel auf getöntem Grund"),
-    COLOR_LINES("colorlines", "7 · Farbfläche mit Linien", "Farbfläche mit kräftigen hellen Trennlinien"),
-    LEVELS("levels", "8 · Ebenen-Schattierung", "Hauptaufgaben fett mit Farbbalken, Unteraufgaben heller");
+    LINES("lines", "3 · Trennlinien", "Weiß, feine Linie zwischen allen Einträgen"),
+    ZEBRA("zebra", "4 · Zebra", "Zeilen abwechselnd weiß / hellgrau, farbiger Kopf"),
+    TILES("tiles", "5 · Kachelzeilen", "Jeder Eintrag als eigene Kachel auf getöntem Grund"),
+    COLOR_LINES("colorlines", "6 · Farbfläche mit Linien", "Farbfläche mit kräftigen hellen Trennlinien"),
+    LEVELS("levels", "7 · Ebenen-Schattierung", "Farbbalken in Listenfarbe, Linien zwischen den Einträgen");
 
     /** layouts with white text on the group colour */
     val dark get() = this == COLOR || this == COLOR_LINES
 
     companion object {
-        /** "cards" was removed – such widgets fall back to "Trennlinien". */
-        fun of(key: String?) = entries.firstOrNull { it.key == key } ?: if (key == "cards") LINES else COLOR
+        /** "cards" and "compact" were removed – such widgets fall back to "Trennlinien". */
+        fun of(key: String?) = entries.firstOrNull { it.key == key }
+            ?: if (key == "cards" || key == "compact") LINES else COLOR
     }
 }
 

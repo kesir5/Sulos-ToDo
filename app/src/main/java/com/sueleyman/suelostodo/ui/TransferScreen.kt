@@ -275,7 +275,10 @@ fun TransferScreen(preselectedList: String?, onBack: () -> Unit) {
                         Button(enabled = !state.busy, onClick = { vm.msLoadLists() }) { Text("Importieren") }
                         OutlinedButton(enabled = !state.busy, onClick = { pickFor = "msExport" }) { Text("Exportieren") }
                     }
-                    TextButton(onClick = { MsAuth.signOut(context) }) { Text("Abmelden") }
+                    HorizontalDivider()
+                    FlaggedMailSection()
+                    HorizontalDivider()
+                    TextButton(onClick = { MsAuth.signOut(context); com.sueleyman.suelostodo.io.FlaggedMail.schedule(context) }) { Text("Abmelden") }
                 }
             }
 
@@ -495,4 +498,34 @@ private fun MsImportDialog(lists: List<MsList>, onDismiss: () -> Unit, onConfirm
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Abbrechen") } }
     )
+}
+
+
+/** Option: Outlook flagged e-mails are fetched automatically and kept in sync. */
+@Composable
+private fun FlaggedMailSection() {
+    val context = LocalContext.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var on by remember { mutableStateOf(com.sueleyman.suelostodo.io.FlaggedMail.isEnabled(context)) }
+    val live by com.sueleyman.suelostodo.io.FlaggedMail.status.collectAsState()
+    val msg = live ?: com.sueleyman.suelostodo.io.FlaggedMail.lastMessage(context)
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text("Markierte E-Mails abrufen", style = MaterialTheme.typography.bodyLarge)
+            Text(
+                "Mit Fähnchen markierte Outlook-Mails erscheinen automatisch in der Liste „Markierte E-Mails“ " +
+                    "(stündlich und beim Öffnen der App). Abhaken hier markiert die Mail in Outlook als erledigt.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Switch(checked = on, onCheckedChange = {
+            on = it
+            com.sueleyman.suelostodo.io.FlaggedMail.setEnabled(context, it)
+            if (it) scope.launch { runCatching { com.sueleyman.suelostodo.io.FlaggedMail.sync(context) } }
+        })
+    }
+    if (on) OutlinedButton(onClick = { scope.launch { runCatching { com.sueleyman.suelostodo.io.FlaggedMail.sync(context) } } }) {
+        Text("Jetzt abrufen")
+    }
+    msg?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
 }

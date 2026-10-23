@@ -123,6 +123,7 @@ class MainActivity : ComponentActivity() {
         // make sure placed widgets are (re)drawn whenever the app is opened
         (application as SuelosToDoApp).appScope.launch {
             runCatching { com.sueleyman.suelostodo.widget.TaskWidget.refresh(this@MainActivity) }
+            runCatching { com.sueleyman.suelostodo.io.FlaggedMail.syncIfDue(this@MainActivity) }
         }
     }
 
