@@ -42,13 +42,6 @@
             </intent-filter>
         </activity>
 
-        <activity
-            android:name=".widget.WidgetConfigActivity"
-            android:exported="false"
-            android:excludeFromRecents="true"
-            android:taskAffinity=""
-            android:label="Widget einrichten" />
-
         <receiver
             android:name=".widget.TaskWidgetReceiver"
             android:exported="true"

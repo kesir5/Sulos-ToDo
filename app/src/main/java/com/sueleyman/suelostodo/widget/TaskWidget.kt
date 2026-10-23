@@ -13,6 +13,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.glance.appwidget.state.updateAppWidgetState
 import androidx.glance.GlanceId
 import androidx.glance.ColorFilter
 import androidx.glance.layout.Box
@@ -68,6 +70,10 @@ internal val KEY_SOURCE = stringPreferencesKey("source")
 private val KEY_LEGACY_LIST = stringPreferencesKey("listId")
 /** Layout of a widget: "color" | "light" | "compact" | "cards" */
 internal val KEY_LAYOUT = stringPreferencesKey("layout")
+/** true while the in-widget selection menu is shown */
+internal val KEY_PICKER = booleanPreferencesKey("picker")
+private val P_SOURCE = ActionParameters.Key<String>("source")
+private val P_LAYOUT = ActionParameters.Key<String>("layout")
 
 enum class WidgetLayout(val key: String, val title: String, val description: String) {
     COLOR("color", "1 · Farbfläche", "Ganze Fläche in der Gruppenfarbe, weiße Schrift"),
@@ -157,7 +163,8 @@ class TaskWidget : GlanceAppWidget() {
             val d by data.collectAsState(initial = WidgetData())
             val source = prefs[KEY_SOURCE] ?: prefs[KEY_LEGACY_LIST]?.let { "list:$it" } ?: "list:$INBOX_ID"
             val view = remember(source, d) { buildWidgetView(source, d) }
-            when (WidgetLayout.of(prefs[KEY_LAYOUT])) {
+            if (prefs[KEY_PICKER] == true) PickerContent(d, source, WidgetLayout.of(prefs[KEY_LAYOUT]))
+            else when (WidgetLayout.of(prefs[KEY_LAYOUT])) {
                 WidgetLayout.COLOR -> WidgetContent(context, appWidgetId, view, d.loaded)
                 WidgetLayout.LIGHT -> LightContent(context, appWidgetId, view, d.loaded)
                 WidgetLayout.COMPACT -> CompactContent(context, appWidgetId, view, d.loaded)
@@ -176,11 +183,7 @@ private fun WidgetContent(context: Context, appWidgetId: Int, v: WidgetView, loa
     val bg = Color(v.color)
     val white = ColorProvider(Color.White)
     val dim = ColorProvider(Color(0xCCFFFFFF))
-    val pick = actionStartActivity(
-        Intent(context, WidgetConfigActivity::class.java)
-            .setData(Uri.parse("suelostodo://widget/$appWidgetId"))
-            .putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
-    )
+    val pick = actionRunCallback<OpenPickerAction>()
 
     Column(
         modifier = GlanceModifier.fillMaxSize().background(bg).cornerRadius(20.dp).padding(12.dp)
@@ -273,11 +276,8 @@ private fun WidgetContent(context: Context, appWidgetId: Int, v: WidgetView, loa
 
 // =========================================================================== shared helpers
 
-private fun pickAction(context: Context, appWidgetId: Int) = actionStartActivity(
-    Intent(context, WidgetConfigActivity::class.java)
-        .setData(Uri.parse("suelostodo://widget/$appWidgetId"))
-        .putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
-)
+private fun pickAction(@Suppress("UNUSED_PARAMETER") context: Context, @Suppress("UNUSED_PARAMETER") appWidgetId: Int) =
+    actionRunCallback<OpenPickerAction>()
 
 private fun addAction(context: Context, listId: String) = actionStartActivity(
     Intent(context, MainActivity::class.java)
@@ -455,6 +455,117 @@ private fun CardsContent(context: Context, appWidgetId: Int, v: WidgetView, load
                 }
             }
         }
+    }
+}
+
+// =========================================================================== in-widget picker
+
+/**
+ * Selection menu shown *inside* the widget (no extra activity needed):
+ * layout chips on top, then smart lists, groups and lists. Tapping an entry applies it and closes the menu.
+ */
+@Composable
+private fun PickerContent(d: WidgetData, current: String, layout: WidgetLayout) {
+    val accent = Color(0xFF185FA5)
+    data class Opt(val key: String, val label: String, val color: Long, val indent: Int, val header: Boolean = false)
+    val opts = buildList {
+        add(Opt("h1", "SMART-LISTEN", 0, 0, true))
+        add(Opt("smart:myday", "Mein Tag", 0xFF3B6EA5, 0))
+        add(Opt("smart:important", "Wichtig", 0xFFC4314B, 0))
+        add(Opt("smart:due", "Fällig", 0xFFCA5010, 0))
+        add(Opt("smart:planned", "Geplant", 0xFF038387, 0))
+        val ids = d.groups.mapTo(HashSet()) { it.id }
+        val tops = d.groups.filter { it.parentId == null || it.parentId !in ids }
+        if (tops.isNotEmpty()) add(Opt("h2", "GRUPPEN", 0, 0, true))
+        tops.forEach { t ->
+            val firstColor = d.lists.firstOrNull { it.groupId == t.id }?.let { ListColors.argb(it.color) } ?: 0xFF5D5A58
+            add(Opt("group:${t.id}", "📁 ${t.name}", t.color ?: firstColor, 0))
+            d.groups.filter { it.parentId == t.id }.forEach { sub ->
+                add(Opt("group:${sub.id}", "📁 ${sub.name}", sub.color ?: t.color ?: firstColor, 1))
+            }
+        }
+        add(Opt("h3", "LISTEN", 0, 0, true))
+        d.lists.forEach { add(Opt("list:${it.id}", it.name, ListColors.argb(it.color), 0)) }
+    }
+    Column(GlanceModifier.fillMaxSize().background(Color.White).cornerRadius(20.dp).padding(10.dp)) {
+        Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("Anzeigen …", style = TextStyle(color = ColorProvider(INK), fontSize = 15.sp, fontWeight = FontWeight.Bold),
+                modifier = GlanceModifier.defaultWeight())
+            Text("✕", style = TextStyle(color = ColorProvider(INK2), fontSize = 18.sp),
+                modifier = GlanceModifier.padding(horizontal = 8.dp).clickable(actionRunCallback<ClosePickerAction>()))
+        }
+        // layout chips
+        Row(GlanceModifier.fillMaxWidth().padding(top = 6.dp, bottom = 4.dp)) {
+            WidgetLayout.entries.forEachIndexed { i, l ->
+                val sel = l == layout
+                Box(
+                    GlanceModifier.defaultWeight().padding(end = if (i < 3) 4.dp else 0.dp)
+                ) {
+                    Text(
+                        listOf("Farbe", "Hell", "Kompakt", "Karten")[i],
+                        style = TextStyle(
+                            color = ColorProvider(if (sel) Color.White else INK), fontSize = 11.sp,
+                            fontWeight = if (sel) FontWeight.Bold else FontWeight.Normal,
+                            textAlign = androidx.glance.text.TextAlign.Center
+                        ),
+                        modifier = GlanceModifier.fillMaxWidth().background(if (sel) accent else Color(0xFFF1F0EC)).cornerRadius(8.dp)
+                            .padding(vertical = 5.dp)
+                            .clickable(actionRunCallback<SelectLayoutAction>(actionParametersOf(P_LAYOUT to l.key)))
+                    )
+                }
+            }
+        }
+        LazyColumn {
+            items(opts, itemId = { it.key.hashCode().toLong() }) { o ->
+                if (o.header) Text(
+                    o.label, style = TextStyle(color = ColorProvider(INK2), fontSize = 10.sp, fontWeight = FontWeight.Bold),
+                    modifier = GlanceModifier.padding(top = 8.dp, bottom = 2.dp)
+                ) else Row(
+                    GlanceModifier.fillMaxWidth()
+                        .background(if (o.key == current) Color(0xFFE6F1FB) else Color.White).cornerRadius(8.dp)
+                        .padding(start = (6 + o.indent * 16).dp, top = 7.dp, bottom = 7.dp, end = 6.dp)
+                        .clickable(actionRunCallback<SelectSourceAction>(actionParametersOf(P_SOURCE to o.key))),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(GlanceModifier.size(10.dp).cornerRadius(5.dp).background(Color(o.color))) {}
+                    Spacer(GlanceModifier.width(8.dp))
+                    Text(o.label, maxLines = 1, style = TextStyle(
+                        color = ColorProvider(INK), fontSize = 14.sp,
+                        fontWeight = if (o.key == current) FontWeight.Bold else FontWeight.Normal
+                    ))
+                }
+            }
+        }
+    }
+}
+
+class OpenPickerAction : ActionCallback {
+    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
+        updateAppWidgetState(context, glanceId) { it[KEY_PICKER] = true }
+        TaskWidget().update(context, glanceId)
+    }
+}
+
+class ClosePickerAction : ActionCallback {
+    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
+        updateAppWidgetState(context, glanceId) { it[KEY_PICKER] = false }
+        TaskWidget().update(context, glanceId)
+    }
+}
+
+class SelectSourceAction : ActionCallback {
+    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
+        val src = parameters[P_SOURCE] ?: return
+        updateAppWidgetState(context, glanceId) { it[KEY_SOURCE] = src; it[KEY_PICKER] = false }
+        TaskWidget().update(context, glanceId)
+    }
+}
+
+class SelectLayoutAction : ActionCallback {
+    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
+        val l = parameters[P_LAYOUT] ?: return
+        updateAppWidgetState(context, glanceId) { it[KEY_LAYOUT] = l }
+        TaskWidget().update(context, glanceId)
     }
 }
 
