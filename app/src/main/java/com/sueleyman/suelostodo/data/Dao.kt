@@ -81,6 +81,9 @@ interface TaskDao {
     @Query("SELECT * FROM tasks WHERE deleted = 0 AND done = 0 ORDER BY sortOrder")
     fun observeOpenTasks(): Flow<List<Task>>
 
+    @Query("SELECT * FROM tasks WHERE deleted = 0 AND done = 0 ORDER BY sortOrder")
+    suspend fun getOpenTasks(): List<Task>
+
     @Query("SELECT * FROM tasks WHERE id = :id")
     fun observeTask(id: String): Flow<Task?>
 

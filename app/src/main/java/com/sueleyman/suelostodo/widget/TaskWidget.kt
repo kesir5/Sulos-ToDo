@@ -1,306 +1,234 @@
 package com.sueleyman.suelostodo.widget
 
+import android.app.Activity
+import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
+import android.appwidget.AppWidgetProvider
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.datastore.preferences.core.Preferences
-import androidx.datastore.preferences.core.stringPreferencesKey
-import androidx.datastore.preferences.core.booleanPreferencesKey
-import androidx.glance.appwidget.state.updateAppWidgetState
-import androidx.glance.GlanceId
-import androidx.glance.ColorFilter
-import androidx.glance.layout.Box
-import com.sueleyman.suelostodo.ui.TreeRow
-import androidx.glance.GlanceModifier
-import androidx.glance.Image
-import androidx.glance.ImageProvider
-import androidx.glance.action.ActionParameters
-import androidx.glance.action.actionParametersOf
-import androidx.glance.action.clickable
-import androidx.glance.appwidget.GlanceAppWidget
-import androidx.glance.appwidget.GlanceAppWidgetManager
-import androidx.glance.appwidget.GlanceAppWidgetReceiver
-import androidx.glance.appwidget.action.ActionCallback
-import androidx.glance.appwidget.action.actionRunCallback
-import androidx.glance.appwidget.action.actionStartActivity
-import androidx.glance.appwidget.cornerRadius
-import androidx.glance.appwidget.lazy.LazyColumn
-import androidx.glance.appwidget.lazy.items
-import androidx.glance.appwidget.provideContent
-import androidx.glance.appwidget.updateAll
-import androidx.glance.background
-import androidx.glance.currentState
-import androidx.glance.layout.Alignment
-import androidx.glance.layout.Column
-import androidx.glance.layout.Row
-import androidx.glance.layout.Spacer
-import androidx.glance.layout.fillMaxSize
-import androidx.glance.layout.fillMaxWidth
-import androidx.glance.layout.padding
-import androidx.glance.layout.size
-import androidx.glance.layout.width
-import androidx.glance.state.PreferencesGlanceStateDefinition
-import androidx.glance.text.FontWeight
-import androidx.glance.text.Text
-import androidx.glance.text.TextStyle
-import androidx.glance.unit.ColorProvider
+import android.os.Bundle
+import android.view.View
+import android.widget.RemoteViews
+import android.widget.RemoteViewsService
 import com.sueleyman.suelostodo.MainActivity
 import com.sueleyman.suelostodo.R
 import com.sueleyman.suelostodo.SuelosToDoApp
-import com.sueleyman.suelostodo.data.INBOX_ID
 import com.sueleyman.suelostodo.data.ListColors
-import com.sueleyman.suelostodo.data.ListGroup
 import com.sueleyman.suelostodo.data.Task
-import com.sueleyman.suelostodo.data.TaskList
-import com.sueleyman.suelostodo.ui.flattenTree
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.combine
+import com.sueleyman.suelostodo.ui.TreeRow
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import java.time.LocalDate
 
-/** Selected source of a widget: "list:<id>", "group:<id>" or "smart:<myday|important|due|planned>". */
-internal val KEY_SOURCE = stringPreferencesKey("source")
-private val KEY_LEGACY_LIST = stringPreferencesKey("listId")
-/** Layout of a widget: "color" | "light" | "compact" | "cards" */
-internal val KEY_LAYOUT = stringPreferencesKey("layout")
-/** true while the in-widget selection menu is shown */
-internal val KEY_PICKER = booleanPreferencesKey("picker")
-private val P_SOURCE = ActionParameters.Key<String>("source")
-private val P_LAYOUT = ActionParameters.Key<String>("layout")
+/*
+ * Home-screen widget built with classic RemoteViews (no Glance / WorkManager):
+ * every change is pushed directly via AppWidgetManager, so the widget never hangs on a spinner
+ * and keeps reacting even when the system holds back background jobs.
+ */
 
-enum class WidgetLayout(val key: String, val title: String, val description: String) {
-    COLOR("color", "1 · Farbfläche", "Ganze Fläche in der Gruppenfarbe, weiße Schrift"),
-    LIGHT("light", "2 · Hell mit Farbkopf", "Weiße Karte, farbiger Kopfbalken, Fälligkeit rechts"),
-    COMPACT("compact", "3 · Kompakt mit Zählern", "Zähler oben, dringendste Aufgaben einzeilig – für kleine Widgets"),
-    CARDS("cards", "4 · Karten je Liste", "Jede Liste als eigene Karte – für große Widgets");
+private const val ACTION_PICKER = "com.sueleyman.suelostodo.widget.PICKER"
+private const val ACTION_LAYOUT = "com.sueleyman.suelostodo.widget.LAYOUT"
+private const val EXTRA_LAYOUT = "layout"
+internal const val EXTRA_OP = "op"
+internal const val EXTRA_TASK = "task"
+internal const val EXTRA_SOURCE = "source"
 
-    companion object { fun of(key: String?) = entries.firstOrNull { it.key == key } ?: COLOR }
-}
-internal val KEY_TASK = ActionParameters.Key<String>("taskId")
+private const val INK = 0xFF1F1F1F.toInt()
+private const val INK2 = 0xFF6B6B6B.toInt()
+private const val RED = 0xFFC4314B.toInt()
+private const val WHITE = 0xFFFFFFFF.toInt()
+private const val DIM = 0xCCFFFFFF.toInt()
 
-/** Everything a widget needs, loaded from the database. */
-data class WidgetData(
-    val lists: List<TaskList> = emptyList(),
-    val groups: List<ListGroup> = emptyList(),
-    val open: List<Task> = emptyList(),
-    val loaded: Boolean = false,
-)
-
-/** One block of rows; [title] is shown as small section head (group view). */
-data class WidgetSection(val title: String?, val color: Long, val rows: List<com.sueleyman.suelostodo.ui.TreeRow>)
-
-data class WidgetView(
-    val title: String,
-    val color: Long,
-    val sections: List<WidgetSection>,
-    val addToList: String,
-) {
-    val count get() = sections.sumOf { s -> s.rows.count { it.task.depth == 0 } }
+private fun deep(c: Long): Int {
+    val r = ((c shr 16) and 0xFF) * 7 / 10
+    val g = ((c shr 8) and 0xFF) * 7 / 10
+    val b = (c and 0xFF) * 7 / 10
+    return (0xFF000000L or (r shl 16) or (g shl 8) or b).toInt()
 }
 
-/** Resolves the selected source into title, colour and rows. Pure function – unit-testable. */
-fun buildWidgetView(source: String, d: WidgetData): WidgetView {
-    val type = source.substringBefore(':')
-    val id = source.substringAfter(':', "")
-    val listById = d.lists.associateBy { it.id }
-    val today = LocalDate.now().toEpochDay()
-    fun listColor(l: TaskList?) = ListColors.argb(l?.color ?: 0)
-    fun sectionFor(l: TaskList, title: String?) =
-        WidgetSection(title, listColor(l), flattenTree(d.open.filter { it.listId == l.id }))
+/** Entry point used by the app to redraw widgets. */
+object TaskWidget {
+    fun ids(c: Context): IntArray =
+        AppWidgetManager.getInstance(c).getAppWidgetIds(ComponentName(c, TaskWidgetReceiver::class.java))
 
-    return when (type) {
-        "group" -> {
-            val g = d.groups.firstOrNull { it.id == id }
-            if (g == null) buildWidgetView("list:$INBOX_ID", d) else {
-                val subs = d.groups.filter { it.parentId == g.id }
-                val direct = d.lists.filter { it.groupId == g.id }
-                val color = g.color ?: direct.firstOrNull()?.let { listColor(it) } ?: ListColors.argb(0)
-                val sections = direct.map { sectionFor(it, it.name) } +
-                    subs.flatMap { s -> d.lists.filter { it.groupId == s.id }.map { sectionFor(it, "${s.name} › ${it.name}") } }
-                WidgetView(g.name, color, sections.filter { it.rows.isNotEmpty() }, direct.firstOrNull()?.id ?: INBOX_ID)
-            }
-        }
-        "smart" -> {
-            val (title, color, filter) = when (id) {
-                "myday" -> Triple("Mein Tag", 0xFF3B6EA5, { t: Task -> t.myDay == today })
-                "important" -> Triple("Wichtig", 0xFFC4314B, { t: Task -> t.important })
-                "planned" -> Triple("Geplant", 0xFF038387, { t: Task -> t.dueDate != null })
-                else -> Triple("Fällig", 0xFFCA5010, { t: Task -> t.dueDate != null && t.dueDate <= today })
-            }
-            val tasks = d.open.filter { it.listId in listById && filter(it) }
-                .sortedWith(compareBy({ it.dueDate ?: Long.MAX_VALUE }, { it.sortOrder }))
-                .map { com.sueleyman.suelostodo.ui.TreeRow(it.copy(depth = 0), false, 0, 0) }
-            WidgetView(title, color, listOf(WidgetSection(null, color, tasks)), INBOX_ID)
-        }
-        else -> {
-            val l = listById[id] ?: listById[INBOX_ID] ?: d.lists.firstOrNull()
-            if (l == null) WidgetView("Sülos ToDo", ListColors.argb(0), emptyList(), INBOX_ID)
-            else WidgetView(l.name, listColor(l), listOf(sectionFor(l, null)), l.id)
-        }
-    }
-}
+    suspend fun refresh(c: Context) = updateAll(c)
 
-class TaskWidget : GlanceAppWidget() {
-    override val stateDefinition = PreferencesGlanceStateDefinition
-
-    override suspend fun provideGlance(context: Context, id: GlanceId) {
-        val repo = (context.applicationContext as SuelosToDoApp).repo
-        val appWidgetId = GlanceAppWidgetManager(context).getAppWidgetId(id)
-        // IMPORTANT: create the flow once. Creating it inside the composition made collectAsState
-        // restart on every recomposition, so the widget never finished loading (endless spinner).
-        val data: Flow<WidgetData> = combine(repo.observeLists(), repo.observeGroups(), repo.observeOpenTasks()) { l, g, o ->
-            WidgetData(l, g, o, loaded = true)
-        }
-        val selFlow = WidgetPrefs.flow(context, appWidgetId)
-        val initialSel = WidgetPrefs.get(context, appWidgetId)
-        provideContent {
-            val d by data.collectAsState(initial = WidgetData())
-            val sel by selFlow.collectAsState(initial = initialSel)
-            val source = sel.source
-            val view = remember(source, d) { buildWidgetView(source, d) }
-            if (sel.picker) PickerContent(d, source, WidgetLayout.of(sel.layout))
-            else when (WidgetLayout.of(sel.layout)) {
-                WidgetLayout.COLOR -> WidgetContent(context, appWidgetId, view, d.loaded)
-                WidgetLayout.LIGHT -> LightContent(context, appWidgetId, view, d.loaded)
-                WidgetLayout.COMPACT -> CompactContent(context, appWidgetId, view, d.loaded)
-                WidgetLayout.CARDS -> CardsContent(context, appWidgetId, view, d.loaded)
-            }
-        }
+    suspend fun updateAll(c: Context) {
+        val ids = ids(c)
+        if (ids.isEmpty()) return
+        val data = withContext(Dispatchers.IO) { (c.applicationContext as SuelosToDoApp).repo.widgetData() }
+        ids.forEach { push(c, it, data) }
     }
 
-    companion object {
-        suspend fun refresh(context: Context) = TaskWidget().updateAll(context)
+    suspend fun update(c: Context, id: Int) {
+        val data = withContext(Dispatchers.IO) { (c.applicationContext as SuelosToDoApp).repo.widgetData() }
+        push(c, id, data)
     }
-}
 
-@Composable
-private fun WidgetContent(context: Context, appWidgetId: Int, v: WidgetView, loaded: Boolean) {
-    val bg = Color(v.color)
-    val white = ColorProvider(Color.White)
-    val dim = ColorProvider(Color(0xCCFFFFFF))
-    val pick = actionRunCallback<OpenPickerAction>()
+    private fun push(c: Context, id: Int, data: WidgetData) {
+        val mgr = AppWidgetManager.getInstance(c)
+        mgr.updateAppWidget(id, buildRoot(c, id, data, WidgetPrefs.get(c, id)))
+        @Suppress("DEPRECATION")
+        mgr.notifyAppWidgetViewDataChanged(id, R.id.w_list)
+    }
 
-    Column(
-        modifier = GlanceModifier.fillMaxSize().background(bg).cornerRadius(20.dp).padding(12.dp)
-    ) {
-        // header: tap the title to choose group / list
-        Row(
-            modifier = GlanceModifier.fillMaxWidth().padding(bottom = 6.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(
-                modifier = GlanceModifier.defaultWeight().clickable(pick),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = v.title,
-                    style = TextStyle(color = white, fontSize = 18.sp, fontWeight = FontWeight.Bold),
-                    maxLines = 1
-                )
-                Image(ImageProvider(R.drawable.ic_dropdown), "Gruppe oder Liste wählen", GlanceModifier.size(22.dp))
-                Spacer(GlanceModifier.width(4.dp))
-                Text("${v.count}", style = TextStyle(color = dim, fontSize = 13.sp))
-            }
-            Image(
-                ImageProvider(R.drawable.ic_add), "Aufgabe hinzufügen",
-                GlanceModifier.size(30.dp).clickable(
-                    actionStartActivity(
-                        Intent(context, MainActivity::class.java)
-                            .setData(Uri.parse("suelostodo://add/${v.addToList}"))
-                            .putExtra(MainActivity.EXTRA_ADD_TO_LIST, v.addToList)
-                    )
-                )
-            )
+    /** Builds the outer widget (background, header, counters, chips, list adapter). */
+    fun buildRoot(c: Context, id: Int, data: WidgetData, sel: WidgetSel): RemoteViews {
+        val v = buildWidgetView(sel.source, data)
+        val layout = WidgetLayout.of(sel.layout)
+        val rv = RemoteViews(c.packageName, R.layout.widget_root)
+        val accent = v.color
+
+        // ---------- colours per layout
+        val bg: Int; val titleColor: Int; val subColor: Int; val plusBg: Int; val plusFg: Int; var headBg = false
+        when {
+            sel.picker -> { bg = WHITE; titleColor = INK; subColor = INK2; plusBg = 0xFFF1F0EC.toInt(); plusFg = INK }
+            layout == WidgetLayout.COLOR -> { bg = accent.toInt(); titleColor = WHITE; subColor = DIM; plusBg = 0x33FFFFFF; plusFg = WHITE }
+            layout == WidgetLayout.LIGHT -> { bg = WHITE; titleColor = WHITE; subColor = DIM; plusBg = 0x33FFFFFF; plusFg = WHITE; headBg = true }
+            layout == WidgetLayout.COMPACT -> { bg = WHITE; titleColor = INK; subColor = INK2; plusBg = (0x2E000000L or (accent and 0xFFFFFF)).toInt(); plusFg = deep(accent) }
+            else -> { bg = 0xFFFBF8F6.toInt(); titleColor = deep(accent); subColor = INK2; plusBg = accent.toInt(); plusFg = WHITE }
         }
-        val rows = v.sections.flatMap { s ->
-            (if (s.title != null) listOf<Any>(s) else emptyList()) + s.rows
-        }
-        if (rows.isEmpty()) {
-            Text(
-                if (loaded) "Keine offenen Aufgaben" else "Lade …",
-                style = TextStyle(color = dim, fontSize = 14.sp)
-            )
+        rv.setInt(R.id.w_bg, "setColorFilter", bg)
+        rv.setViewVisibility(R.id.w_head_bg, if (headBg) View.VISIBLE else View.GONE)
+        if (headBg) rv.setInt(R.id.w_head_bg, "setColorFilter", accent.toInt())
+
+        // ---------- header
+        rv.setTextViewText(R.id.w_title, if (sel.picker) "Anzeigen …" else v.title)
+        rv.setTextColor(R.id.w_title, titleColor)
+        rv.setTextViewText(R.id.w_count, if (sel.picker) "" else " ${v.count}")
+        rv.setTextColor(R.id.w_count, subColor)
+        rv.setViewVisibility(R.id.w_drop, if (sel.picker) View.GONE else View.VISIBLE)
+        rv.setInt(R.id.w_drop, "setColorFilter", titleColor)
+        rv.setOnClickPendingIntent(R.id.w_title_box, broadcast(c, id, ACTION_PICKER, 1))
+        rv.setInt(R.id.w_add_bg, "setColorFilter", plusBg)
+        rv.setInt(R.id.w_add_icon, "setColorFilter", plusFg)
+        if (sel.picker) {
+            rv.setImageViewResource(R.id.w_add_icon, R.drawable.ic_close_w)
+            rv.setOnClickPendingIntent(R.id.w_add, broadcast(c, id, ACTION_PICKER, 2))
         } else {
-            LazyColumn {
-                items(rows, itemId = { r ->
-                    when (r) {
-                        is WidgetSection -> ("s" + r.title).hashCode().toLong()
-                        else -> (r as com.sueleyman.suelostodo.ui.TreeRow).task.id.hashCode().toLong()
-                    }
-                }) { r ->
-                    if (r is WidgetSection) {
-                        Text(
-                            r.title ?: "",
-                            style = TextStyle(color = dim, fontSize = 11.sp, fontWeight = FontWeight.Bold),
-                            maxLines = 1,
-                            modifier = GlanceModifier.padding(top = 8.dp, bottom = 2.dp)
-                        )
-                    } else {
-                        val row = r as com.sueleyman.suelostodo.ui.TreeRow
-                        val t = row.task
-                        Row(
-                            modifier = GlanceModifier.fillMaxWidth().padding(start = (t.depth * 18).dp, top = 5.dp, bottom = 5.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Image(
-                                ImageProvider(R.drawable.ic_circle), "Erledigen",
-                                GlanceModifier.size(if (t.depth == 0) 22.dp else 18.dp)
-                                    .clickable(actionRunCallback<ToggleDoneAction>(actionParametersOf(KEY_TASK to t.id)))
-                            )
-                            Spacer(GlanceModifier.width(8.dp))
-                            Text(
-                                text = t.title + if (row.hasChildren && !t.expanded) "  (+${row.childCount})" else "",
-                                style = TextStyle(color = if (t.depth == 0) white else dim, fontSize = if (t.depth == 0) 15.sp else 14.sp),
-                                maxLines = 2,
-                                modifier = GlanceModifier.defaultWeight().clickable(
-                                    actionStartActivity(
-                                        Intent(context, MainActivity::class.java)
-                                            .setData(Uri.parse("suelostodo://task/${t.id}"))
-                                            .putExtra(MainActivity.EXTRA_TASK_ID, t.id)
-                                    )
-                                )
-                            )
-                            if (t.important) Image(ImageProvider(R.drawable.ic_star), "Wichtig", GlanceModifier.size(16.dp))
-                        }
-                    }
-                }
+            rv.setImageViewResource(R.id.w_add_icon, R.drawable.ic_add)
+            rv.setOnClickPendingIntent(
+                R.id.w_add,
+                PendingIntent.getActivity(
+                    c, id * 10 + 3,
+                    Intent(c, MainActivity::class.java)
+                        .setData(Uri.parse("suelostodo://add/${v.addToList}"))
+                        .putExtra(MainActivity.EXTRA_ADD_TO_LIST, v.addToList)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+            )
+        }
+
+        // ---------- compact counters
+        val showCounters = !sel.picker && layout == WidgetLayout.COMPACT
+        rv.setViewVisibility(R.id.w_counters, if (showCounters) View.VISIBLE else View.GONE)
+        if (showCounters) {
+            val all = v.sections.flatMap { it.rows }.filter { it.task.depth == 0 }
+            val today = LocalDate.now().toEpochDay()
+            val due = all.count { (it.task.dueDate ?: Long.MAX_VALUE) <= today }
+            rv.setTextViewText(R.id.w_c1, "${all.size} offen")
+            rv.setTextViewText(R.id.w_c2, "$due fällig")
+            rv.setTextViewText(R.id.w_c3, "${all.count { it.task.important }} wichtig")
+            listOf(R.id.w_c1, R.id.w_c2, R.id.w_c3).forEach { rv.setTextColor(it, INK); rv.setInt(it, "setBackgroundColor", 0) }
+            if (due > 0) rv.setTextColor(R.id.w_c2, RED)
+        }
+
+        // ---------- picker chips
+        rv.setViewVisibility(R.id.w_chips, if (sel.picker) View.VISIBLE else View.GONE)
+        if (sel.picker) {
+            listOf(R.id.w_l1, R.id.w_l2, R.id.w_l3, R.id.w_l4).zip(WidgetLayout.entries).forEachIndexed { i, (vid, l) ->
+                val on = l == layout
+                rv.setTextColor(vid, if (on) WHITE else INK)
+                rv.setInt(vid, "setBackgroundResource", R.drawable.widget_pill)
+                rv.setOnClickPendingIntent(vid, broadcast(c, id, ACTION_LAYOUT, 10 + i, l.key))
+                if (on) rv.setTextViewText(vid, "✓ " + listOf("Farbe", "Hell", "Kompakt", "Karten")[i])
+                else rv.setTextViewText(vid, listOf("Farbe", "Hell", "Kompakt", "Karten")[i])
             }
         }
+
+        // ---------- list
+        val svc = Intent(c, WidgetListService::class.java)
+            .putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id)
+            .setData(Uri.parse("suelostodo://widgetlist/$id"))
+        @Suppress("DEPRECATION")
+        rv.setRemoteAdapter(R.id.w_list, svc)
+        rv.setEmptyView(R.id.w_list, R.id.w_empty)
+        rv.setTextColor(R.id.w_empty, if (!sel.picker && layout == WidgetLayout.COLOR) DIM else INK2)
+        rv.setPendingIntentTemplate(
+            R.id.w_list,
+            PendingIntent.getActivity(
+                c, id * 10 + 7,
+                Intent(c, WidgetActionActivity::class.java).putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id)
+                    .setData(Uri.parse("suelostodo://widgetaction/$id")),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
+            )
+        )
+        return rv
+    }
+
+    private fun broadcast(c: Context, id: Int, action: String, code: Int, layout: String? = null): PendingIntent =
+        PendingIntent.getBroadcast(
+            c, id * 100 + code,
+            Intent(c, TaskWidgetReceiver::class.java).setAction(action)
+                .setData(Uri.parse("suelostodo://widgetbc/$id/$code"))
+                .putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id)
+                .apply { layout?.let { putExtra(EXTRA_LAYOUT, it) } },
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+}
+
+// ===================================================================== list items
+
+sealed interface WItem {
+    val id: Long
+    data class Section(val title: String, val color: Long) : WItem { override val id = ("s$title").hashCode().toLong() }
+    data class Row(val row: TreeRow, val color: Long, val single: Boolean) : WItem { override val id = row.task.id.hashCode().toLong() }
+    data class Head(val label: String) : WItem { override val id = ("h$label").hashCode().toLong() }
+    data class Option(val key: String, val label: String, val color: Long, val indent: Int, val selected: Boolean) : WItem {
+        override val id = key.hashCode().toLong()
     }
 }
 
-// =========================================================================== shared helpers
-
-private fun pickAction(@Suppress("UNUSED_PARAMETER") context: Context, @Suppress("UNUSED_PARAMETER") appWidgetId: Int) =
-    actionRunCallback<OpenPickerAction>()
-
-private fun addAction(context: Context, listId: String) = actionStartActivity(
-    Intent(context, MainActivity::class.java)
-        .setData(Uri.parse("suelostodo://add/$listId"))
-        .putExtra(MainActivity.EXTRA_ADD_TO_LIST, listId)
-)
-
-private fun openTaskAction(context: Context, id: String) = actionStartActivity(
-    Intent(context, MainActivity::class.java)
-        .setData(Uri.parse("suelostodo://task/$id"))
-        .putExtra(MainActivity.EXTRA_TASK_ID, id)
-)
-
-private fun doneAction(id: String) = actionRunCallback<ToggleDoneAction>(actionParametersOf(KEY_TASK to id))
-
-private val INK = Color(0xFF1F1F1F)
-private val INK2 = Color(0xFF6B6B6B)
-private val RED = Color(0xFFC4314B)
-
-/** Darker variant of a colour for text on light backgrounds. */
-private fun Color.deep() = Color(red = red * 0.7f, green = green * 0.7f, blue = blue * 0.7f)
+/** Items shown in the widget list for the given selection. Pure function – unit-testable. */
+fun widgetItems(sel: WidgetSel, d: WidgetData): List<WItem> {
+    if (sel.picker) return buildList {
+        add(WItem.Head("Smart-Listen"))
+        listOf(
+            Triple("smart:myday", "Mein Tag", 0xFF3B6EA5), Triple("smart:important", "Wichtig", 0xFFC4314B),
+            Triple("smart:due", "Fällig", 0xFFCA5010), Triple("smart:planned", "Geplant", 0xFF038387),
+        ).forEach { (k, l, c) -> add(WItem.Option(k, l, c, 0, sel.source == k)) }
+        val ids = d.groups.mapTo(HashSet()) { it.id }
+        val tops = d.groups.filter { it.parentId == null || it.parentId !in ids }
+        if (tops.isNotEmpty()) add(WItem.Head("Gruppen"))
+        tops.forEach { t ->
+            val first = d.lists.firstOrNull { it.groupId == t.id }?.let { ListColors.argb(it.color) } ?: 0xFF5D5A58
+            add(WItem.Option("group:${t.id}", "📁 ${t.name}", t.color ?: first, 0, sel.source == "group:${t.id}"))
+            d.groups.filter { it.parentId == t.id }.forEach { s ->
+                add(WItem.Option("group:${s.id}", "📁 ${s.name}", s.color ?: t.color ?: first, 1, sel.source == "group:${s.id}"))
+            }
+        }
+        add(WItem.Head("Listen"))
+        d.lists.forEach { add(WItem.Option("list:${it.id}", it.name, ListColors.argb(it.color), 0, sel.source == "list:${it.id}")) }
+    }
+    val v = buildWidgetView(sel.source, d)
+    return when (WidgetLayout.of(sel.layout)) {
+        WidgetLayout.COMPACT -> v.sections.flatMap { s -> s.rows.filter { it.task.depth == 0 }.map { it to s.color } }
+            .sortedWith(compareBy({ it.first.task.dueDate ?: Long.MAX_VALUE }, { if (it.first.task.important) 0 else 1 }))
+            .take(6).map { (r, c) -> WItem.Row(r.copy(hasChildren = false), c, true) }
+        WidgetLayout.CARDS -> v.sections.flatMap { s ->
+            listOf(WItem.Section("${s.title ?: v.title}  ·  ${s.rows.count { it.task.depth == 0 }}", s.color)) +
+                s.rows.map { WItem.Row(it, s.color, false) }
+        }
+        else -> v.sections.flatMap { s ->
+            (if (s.title != null) listOf(WItem.Section(s.title, s.color)) else emptyList()) + s.rows.map { WItem.Row(it, s.color, false) }
+        }
+    }
+}
 
 private fun dueLabel(t: Task): Pair<String, Boolean>? {
     val d = t.dueDate ?: return null
@@ -313,274 +241,142 @@ private fun dueLabel(t: Task): Pair<String, Boolean>? {
     }
 }
 
-@Composable
-private fun TaskLine(context: Context, row: TreeRow, accent: Color, textColor: Color, subColor: Color, showDue: Boolean, singleLine: Boolean = false) {
-    val t = row.task
-    Row(
-        modifier = GlanceModifier.fillMaxWidth().padding(start = (t.depth * 18).dp, top = if (singleLine) 3.dp else 5.dp, bottom = if (singleLine) 3.dp else 5.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Image(
-            ImageProvider(R.drawable.ic_circle), "Erledigen",
-            GlanceModifier.size(if (t.depth == 0 && !singleLine) 20.dp else 16.dp).clickable(doneAction(t.id)),
-            colorFilter = ColorFilter.tint(ColorProvider(accent))
-        )
-        Spacer(GlanceModifier.width(8.dp))
-        Text(
-            text = t.title + if (row.hasChildren && !t.expanded) "  (+${row.childCount})" else "",
-            style = TextStyle(color = ColorProvider(if (t.depth == 0) textColor else subColor), fontSize = if (singleLine) 13.sp else 14.sp),
-            maxLines = if (singleLine) 1 else 2,
-            modifier = GlanceModifier.defaultWeight().clickable(openTaskAction(context, t.id))
-        )
-        if (showDue) dueLabel(t)?.let { (txt, hot) ->
-            Text(txt, style = TextStyle(color = ColorProvider(if (hot) RED else subColor), fontSize = 11.sp))
-        }
-        if (t.important) Image(
-            ImageProvider(R.drawable.ic_star), "Wichtig", GlanceModifier.size(14.dp),
-            colorFilter = ColorFilter.tint(ColorProvider(accent))
-        )
+class WidgetListService : RemoteViewsService() {
+    override fun onGetViewFactory(intent: Intent): RemoteViewsFactory =
+        WidgetFactory(applicationContext, intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, 0))
+}
+
+class WidgetFactory(private val c: Context, private val widgetId: Int) : RemoteViewsService.RemoteViewsFactory {
+    private var items: List<WItem> = emptyList()
+    private var sel = WidgetSel()
+
+    override fun onCreate() {}
+    override fun onDestroy() {}
+    override fun onDataSetChanged() {
+        sel = WidgetPrefs.get(c, widgetId)
+        val data = runCatching { runBlocking { (c.applicationContext as SuelosToDoApp).repo.widgetData() } }.getOrElse { WidgetData() }
+        items = widgetItems(sel, data)
     }
-}
 
-@Composable
-private fun Header(context: Context, appWidgetId: Int, v: WidgetView, fg: Color, sub: Color, plusBg: Color, plusFg: Color, size: Int = 17) {
-    Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Row(GlanceModifier.defaultWeight().clickable(pickAction(context, appWidgetId)), verticalAlignment = Alignment.CenterVertically) {
-            Text(v.title, style = TextStyle(color = ColorProvider(fg), fontSize = size.sp, fontWeight = FontWeight.Bold), maxLines = 1)
-            Image(ImageProvider(R.drawable.ic_dropdown), "Auswahl", GlanceModifier.size(20.dp), colorFilter = ColorFilter.tint(ColorProvider(fg)))
-            Text("${v.count}", style = TextStyle(color = ColorProvider(sub), fontSize = 12.sp))
-        }
-        Box(
-            GlanceModifier.size(28.dp).cornerRadius(14.dp).background(plusBg).clickable(addAction(context, v.addToList)),
-            contentAlignment = Alignment.Center
-        ) {
-            Image(ImageProvider(R.drawable.ic_add), "Aufgabe hinzufügen", GlanceModifier.size(20.dp), colorFilter = ColorFilter.tint(ColorProvider(plusFg)))
-        }
-    }
-}
+    override fun getCount() = items.size
+    override fun getViewTypeCount() = 4
+    override fun hasStableIds() = true
+    override fun getItemId(position: Int) = items.getOrNull(position)?.id ?: position.toLong()
+    override fun getLoadingView(): RemoteViews? = null
 
-private fun flatItems(v: WidgetView): List<Any> =
-    v.sections.flatMap { s -> (if (s.title != null) listOf<Any>(s) else emptyList()) + s.rows }
-
-private fun itemId(r: Any): Long = when (r) {
-    is WidgetSection -> ("s" + r.title).hashCode().toLong()
-    else -> (r as TreeRow).task.id.hashCode().toLong()
-}
-
-// =========================================================================== 2 · light
-
-@Composable
-private fun LightContent(context: Context, appWidgetId: Int, v: WidgetView, loaded: Boolean) {
-    val accent = Color(v.color)
-    Column(GlanceModifier.fillMaxSize().background(Color.White).cornerRadius(20.dp)) {
-        Box(GlanceModifier.fillMaxWidth().background(accent).padding(horizontal = 12.dp, vertical = 9.dp)) {
-            Header(context, appWidgetId, v, Color.White, Color(0xDDFFFFFF), Color(0x33FFFFFF), Color.White, 16)
-        }
-        val items = flatItems(v)
-        if (items.isEmpty()) Text(if (loaded) "Keine offenen Aufgaben" else "Lade …",
-            style = TextStyle(color = ColorProvider(INK2), fontSize = 13.sp), modifier = GlanceModifier.padding(12.dp))
-        else LazyColumn(GlanceModifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
-            items(items, itemId = { itemId(it) }) { r ->
-                if (r is WidgetSection) Text(
-                    (r.title ?: "").uppercase(), maxLines = 1,
-                    style = TextStyle(color = ColorProvider(accent.deep()), fontSize = 10.sp, fontWeight = FontWeight.Bold),
-                    modifier = GlanceModifier.padding(top = 7.dp, bottom = 1.dp)
-                ) else TaskLine(context, r as TreeRow, accent, INK, INK2, showDue = true)
-            }
-        }
-    }
-}
-
-// =========================================================================== 3 · compact
-
-@Composable
-private fun CompactContent(context: Context, appWidgetId: Int, v: WidgetView, loaded: Boolean) {
-    val accent = Color(v.color)
-    val all = v.sections.flatMap { it.rows }.filter { it.task.depth == 0 }
-    val today = LocalDate.now().toEpochDay()
-    val due = all.count { (it.task.dueDate ?: Long.MAX_VALUE) <= today }
-    val important = all.count { it.task.important }
-    val top = all.sortedWith(compareBy({ it.task.dueDate ?: Long.MAX_VALUE }, { if (it.task.important) 0 else 1 }, { it.task.sortOrder }))
-    val shown = top.take(5)
-    Column(GlanceModifier.fillMaxSize().background(Color.White).cornerRadius(18.dp).padding(horizontal = 10.dp, vertical = 8.dp)) {
-        Header(context, appWidgetId, v, INK, INK2, accent.copy(alpha = 0.18f), accent.deep(), 14)
-        Row(GlanceModifier.fillMaxWidth().padding(top = 6.dp, bottom = 4.dp)) {
-            Counter("${all.size}", "offen", Color(0xFFF1F0EC), INK, GlanceModifier.defaultWeight())
-            Spacer(GlanceModifier.width(5.dp))
-            Counter("$due", "fällig", if (due > 0) Color(0xFFFCE6EA) else Color(0xFFF1F0EC), if (due > 0) RED else INK, GlanceModifier.defaultWeight())
-            Spacer(GlanceModifier.width(5.dp))
-            Counter("$important", "wichtig", Color(0xFFF1F0EC), INK, GlanceModifier.defaultWeight())
-        }
-        if (shown.isEmpty()) Text(if (loaded) "Keine offenen Aufgaben" else "Lade …", style = TextStyle(color = ColorProvider(INK2), fontSize = 12.sp))
-        shown.forEach { TaskLine(context, it.copy(hasChildren = false), accent, INK, INK2, showDue = false, singleLine = true) }
-        if (top.size > shown.size) Text("+${top.size - shown.size} weitere", style = TextStyle(color = ColorProvider(INK2), fontSize = 11.sp))
-    }
-}
-
-@Composable
-private fun Counter(n: String, label: String, bg: Color, fg: Color, modifier: GlanceModifier) {
-    Row(modifier.background(bg).cornerRadius(7.dp).padding(vertical = 3.dp), horizontalAlignment = Alignment.CenterHorizontally,
-        verticalAlignment = Alignment.CenterVertically) {
-        Text(n, style = TextStyle(color = ColorProvider(fg), fontSize = 12.sp, fontWeight = FontWeight.Bold))
-        Spacer(GlanceModifier.width(3.dp))
-        Text(label, style = TextStyle(color = ColorProvider(fg), fontSize = 11.sp))
-    }
-}
-
-// =========================================================================== 4 · cards
-
-@Composable
-private fun CardsContent(context: Context, appWidgetId: Int, v: WidgetView, loaded: Boolean) {
-    val accent = Color(v.color)
-    Column(GlanceModifier.fillMaxSize().background(Color(0xFFFBF8F6)).cornerRadius(20.dp).padding(horizontal = 10.dp, vertical = 10.dp)) {
-        Box(GlanceModifier.padding(start = 4.dp, bottom = 6.dp)) {
-            Header(context, appWidgetId, v, accent.deep(), INK2, accent, Color.White, 16)
-        }
-        if (v.sections.isEmpty()) Text(if (loaded) "Keine offenen Aufgaben" else "Lade …",
-            style = TextStyle(color = ColorProvider(INK2), fontSize = 13.sp), modifier = GlanceModifier.padding(4.dp))
-        else LazyColumn {
-            items(v.sections, itemId = { ("c" + it.title + it.rows.firstOrNull()?.task?.id).hashCode().toLong() }) { s ->
-                val c = Color(s.color)
-                Column(GlanceModifier.fillMaxWidth().padding(bottom = 6.dp)) {
-                    Column(GlanceModifier.fillMaxWidth().background(Color.White).cornerRadius(12.dp).padding(horizontal = 10.dp, vertical = 6.dp)) {
-                        Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            Box(GlanceModifier.size(8.dp).cornerRadius(4.dp).background(c)) {}
-                            Spacer(GlanceModifier.width(6.dp))
-                            Text((s.title ?: v.title).uppercase(), maxLines = 1,
-                                style = TextStyle(color = ColorProvider(c.deep()), fontSize = 10.sp, fontWeight = FontWeight.Bold),
-                                modifier = GlanceModifier.defaultWeight())
-                            Text("${s.rows.count { it.task.depth == 0 }}", style = TextStyle(color = ColorProvider(c.deep()), fontSize = 11.sp))
-                        }
-                        s.rows.take(8).forEach { TaskLine(context, it, c, INK, INK2, showDue = true) }
-                        if (s.rows.size > 8) Text("+${s.rows.size - 8} weitere", style = TextStyle(color = ColorProvider(INK2), fontSize = 11.sp))
-                    }
+    override fun getViewAt(position: Int): RemoteViews {
+        val layout = WidgetLayout.of(sel.layout)
+        val dark = !sel.picker && layout == WidgetLayout.COLOR
+        return when (val it = items.getOrNull(position)) {
+            is WItem.Section -> RemoteViews(c.packageName, R.layout.widget_item_section).apply {
+                setTextViewText(R.id.s_title, it.title)
+                setTextColor(R.id.s_title, if (dark) DIM else deep(it.color))
+                if (layout == WidgetLayout.CARDS) {
+                    setInt(R.id.s_title, "setBackgroundColor", WHITE)
+                    setViewPadding(R.id.s_title, 24, 26, 24, 6)
                 }
             }
+            is WItem.Head -> RemoteViews(c.packageName, R.layout.widget_item_section).apply {
+                setTextViewText(R.id.s_title, it.label)
+                setTextColor(R.id.s_title, INK2)
+            }
+            is WItem.Option -> RemoteViews(c.packageName, R.layout.widget_item_option).apply {
+                setTextViewText(R.id.o_label, it.label)
+                setInt(R.id.o_dot, "setColorFilter", it.color.toInt())
+                setInt(R.id.o_row, "setBackgroundColor", if (it.selected) 0xFFE6F1FB.toInt() else 0)
+                setViewPadding(R.id.o_row, (24 + it.indent * 40), 0, 16, 0)
+                setOnClickFillInIntent(R.id.o_row, Intent().putExtra(EXTRA_OP, "select").putExtra(EXTRA_SOURCE, it.key))
+            }
+            is WItem.Row -> RemoteViews(c.packageName, R.layout.widget_item_task).apply {
+                val t = it.row.task
+                val accent = it.color.toInt()
+                val sub = t.depth > 0
+                setTextViewText(R.id.i_title, t.title + if (it.row.hasChildren && !t.expanded) "  (+${it.row.childCount})" else "")
+                setTextColor(R.id.i_title, if (dark) (if (sub) DIM else WHITE) else (if (sub) INK2 else INK))
+                setInt(R.id.i_title, "setMaxLines", if (it.single) 1 else 2)
+                setInt(R.id.i_check, "setColorFilter", if (dark) WHITE else accent)
+                setInt(R.id.i_star, "setColorFilter", if (dark) WHITE else accent)
+                setViewVisibility(R.id.i_star, if (t.important) View.VISIBLE else View.GONE)
+                val due = if (layout == WidgetLayout.LIGHT || layout == WidgetLayout.CARDS) dueLabel(t) else null
+                setViewVisibility(R.id.i_due, if (due != null) View.VISIBLE else View.GONE)
+                due?.let { (txt, hot) -> setTextViewText(R.id.i_due, txt); setTextColor(R.id.i_due, if (hot) RED else INK2) }
+                setViewPadding(R.id.i_row, 12 + t.depth * 44, 0, 12, 0)
+                if (layout == WidgetLayout.CARDS) setInt(R.id.i_row, "setBackgroundColor", WHITE)
+                setOnClickFillInIntent(R.id.i_check, Intent().putExtra(EXTRA_OP, "toggle").putExtra(EXTRA_TASK, t.id))
+                setOnClickFillInIntent(R.id.i_title, Intent().putExtra(EXTRA_OP, "open").putExtra(EXTRA_TASK, t.id))
+            }
+            null -> RemoteViews(c.packageName, R.layout.widget_item_section)
         }
     }
 }
 
-// =========================================================================== in-widget picker
+// ===================================================================== receiver + action activity
 
-/**
- * Selection menu shown *inside* the widget (no extra activity needed):
- * layout chips on top, then smart lists, groups and lists. Tapping an entry applies it and closes the menu.
- */
-@Composable
-private fun PickerContent(d: WidgetData, current: String, layout: WidgetLayout) {
-    val accent = Color(0xFF185FA5)
-    data class Opt(val key: String, val label: String, val color: Long, val indent: Int, val header: Boolean = false)
-    val opts = buildList {
-        add(Opt("h1", "SMART-LISTEN", 0, 0, true))
-        add(Opt("smart:myday", "Mein Tag", 0xFF3B6EA5, 0))
-        add(Opt("smart:important", "Wichtig", 0xFFC4314B, 0))
-        add(Opt("smart:due", "Fällig", 0xFFCA5010, 0))
-        add(Opt("smart:planned", "Geplant", 0xFF038387, 0))
-        val ids = d.groups.mapTo(HashSet()) { it.id }
-        val tops = d.groups.filter { it.parentId == null || it.parentId !in ids }
-        if (tops.isNotEmpty()) add(Opt("h2", "GRUPPEN", 0, 0, true))
-        tops.forEach { t ->
-            val firstColor = d.lists.firstOrNull { it.groupId == t.id }?.let { ListColors.argb(it.color) } ?: 0xFF5D5A58
-            add(Opt("group:${t.id}", "📁 ${t.name}", t.color ?: firstColor, 0))
-            d.groups.filter { it.parentId == t.id }.forEach { sub ->
-                add(Opt("group:${sub.id}", "📁 ${sub.name}", sub.color ?: t.color ?: firstColor, 1))
+class TaskWidgetReceiver : AppWidgetProvider() {
+    override fun onUpdate(context: Context, mgr: AppWidgetManager, ids: IntArray) {
+        val pending = goAsync()
+        (context.applicationContext as SuelosToDoApp).appScope.launch {
+            try { ids.forEach { runCatching { TaskWidget.update(context, it) } } } finally { pending.finish() }
+        }
+    }
+
+    override fun onAppWidgetOptionsChanged(context: Context, mgr: AppWidgetManager, id: Int, newOptions: Bundle) {
+        onUpdate(context, mgr, intArrayOf(id))
+    }
+
+    override fun onDeleted(context: Context, ids: IntArray) {
+        ids.forEach { WidgetPrefs.remove(context, it) }
+    }
+
+    override fun onReceive(context: Context, intent: Intent) {
+        val id = intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID)
+        when (intent.action) {
+            ACTION_PICKER -> {
+                WidgetPrefs.update(context, id) { it.copy(picker = !it.picker) }
+                redraw(context, id)
+            }
+            ACTION_LAYOUT -> {
+                val l = intent.getStringExtra(EXTRA_LAYOUT) ?: return
+                WidgetPrefs.update(context, id) { it.copy(layout = l) }
+                redraw(context, id)
+            }
+            else -> super.onReceive(context, intent)
+        }
+    }
+
+    private fun redraw(context: Context, id: Int) {
+        val pending = goAsync()
+        (context.applicationContext as SuelosToDoApp).appScope.launch {
+            try { runCatching { TaskWidget.update(context, id) } } finally { pending.finish() }
+        }
+    }
+}
+
+/** Invisible activity handling taps inside the widget list (abhaken, öffnen, Auswahl). */
+class WidgetActionActivity : Activity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        val app = application as SuelosToDoApp
+        val id = intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID)
+        when (intent.getStringExtra(EXTRA_OP)) {
+            "toggle" -> intent.getStringExtra(EXTRA_TASK)?.let { t ->
+                app.appScope.launch { runCatching { app.repo.toggleDone(t); TaskWidget.updateAll(app) } }
+            }
+            "select" -> intent.getStringExtra(EXTRA_SOURCE)?.let { src ->
+                WidgetPrefs.update(app, id) { it.copy(source = src, picker = false) }
+                app.appScope.launch { runCatching { TaskWidget.update(app, id) } }
+            }
+            "open" -> intent.getStringExtra(EXTRA_TASK)?.let { t ->
+                startActivity(
+                    Intent(this, MainActivity::class.java)
+                        .putExtra(MainActivity.EXTRA_TASK_ID, t)
+                        .setData(Uri.parse("suelostodo://task/$t"))
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                )
             }
         }
-        add(Opt("h3", "LISTEN", 0, 0, true))
-        d.lists.forEach { add(Opt("list:${it.id}", it.name, ListColors.argb(it.color), 0)) }
+        finish()
+        @Suppress("DEPRECATION")
+        overridePendingTransition(0, 0)
     }
-    Column(GlanceModifier.fillMaxSize().background(Color.White).cornerRadius(20.dp).padding(10.dp)) {
-        Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("Anzeigen …", style = TextStyle(color = ColorProvider(INK), fontSize = 15.sp, fontWeight = FontWeight.Bold),
-                modifier = GlanceModifier.defaultWeight())
-            Text("✕", style = TextStyle(color = ColorProvider(INK2), fontSize = 18.sp),
-                modifier = GlanceModifier.padding(horizontal = 8.dp).clickable(actionRunCallback<ClosePickerAction>()))
-        }
-        // layout chips
-        Row(GlanceModifier.fillMaxWidth().padding(top = 6.dp, bottom = 4.dp)) {
-            WidgetLayout.entries.forEachIndexed { i, l ->
-                val sel = l == layout
-                Box(
-                    GlanceModifier.defaultWeight().padding(end = if (i < 3) 4.dp else 0.dp)
-                ) {
-                    Text(
-                        listOf("Farbe", "Hell", "Kompakt", "Karten")[i],
-                        style = TextStyle(
-                            color = ColorProvider(if (sel) Color.White else INK), fontSize = 11.sp,
-                            fontWeight = if (sel) FontWeight.Bold else FontWeight.Normal,
-                            textAlign = androidx.glance.text.TextAlign.Center
-                        ),
-                        modifier = GlanceModifier.fillMaxWidth().background(if (sel) accent else Color(0xFFF1F0EC)).cornerRadius(8.dp)
-                            .padding(vertical = 5.dp)
-                            .clickable(actionRunCallback<SelectLayoutAction>(actionParametersOf(P_LAYOUT to l.key)))
-                    )
-                }
-            }
-        }
-        LazyColumn {
-            items(opts, itemId = { it.key.hashCode().toLong() }) { o ->
-                if (o.header) Text(
-                    o.label, style = TextStyle(color = ColorProvider(INK2), fontSize = 10.sp, fontWeight = FontWeight.Bold),
-                    modifier = GlanceModifier.padding(top = 8.dp, bottom = 2.dp)
-                ) else Row(
-                    GlanceModifier.fillMaxWidth()
-                        .background(if (o.key == current) Color(0xFFE6F1FB) else Color.White).cornerRadius(8.dp)
-                        .padding(start = (6 + o.indent * 16).dp, top = 7.dp, bottom = 7.dp, end = 6.dp)
-                        .clickable(actionRunCallback<SelectSourceAction>(actionParametersOf(P_SOURCE to o.key))),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(GlanceModifier.size(10.dp).cornerRadius(5.dp).background(Color(o.color))) {}
-                    Spacer(GlanceModifier.width(8.dp))
-                    Text(o.label, maxLines = 1, style = TextStyle(
-                        color = ColorProvider(INK), fontSize = 14.sp,
-                        fontWeight = if (o.key == current) FontWeight.Bold else FontWeight.Normal
-                    ))
-                }
-            }
-        }
-    }
-}
-
-private fun widgetId(context: Context, glanceId: GlanceId) = GlanceAppWidgetManager(context).getAppWidgetId(glanceId)
-
-class OpenPickerAction : ActionCallback {
-    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
-        WidgetPrefs.update(context, widgetId(context, glanceId)) { it.copy(picker = true) }
-        TaskWidget().update(context, glanceId)
-    }
-}
-
-class ClosePickerAction : ActionCallback {
-    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
-        WidgetPrefs.update(context, widgetId(context, glanceId)) { it.copy(picker = false) }
-        TaskWidget().update(context, glanceId)
-    }
-}
-
-class SelectSourceAction : ActionCallback {
-    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
-        val src = parameters[P_SOURCE] ?: return
-        WidgetPrefs.update(context, widgetId(context, glanceId)) { it.copy(source = src, picker = false) }
-        TaskWidget().update(context, glanceId)
-    }
-}
-
-class SelectLayoutAction : ActionCallback {
-    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
-        val l = parameters[P_LAYOUT] ?: return
-        WidgetPrefs.update(context, widgetId(context, glanceId)) { it.copy(layout = l) }
-        TaskWidget().update(context, glanceId)
-    }
-}
-
-class ToggleDoneAction : ActionCallback {
-    override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
-        val id = parameters[KEY_TASK] ?: return
-        (context.applicationContext as SuelosToDoApp).repo.toggleDone(id)
-        TaskWidget().update(context, glanceId)
-    }
-}
-
-class TaskWidgetReceiver : GlanceAppWidgetReceiver() {
-    override val glanceAppWidget: GlanceAppWidget = TaskWidget()
 }

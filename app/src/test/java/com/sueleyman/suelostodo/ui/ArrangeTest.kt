@@ -62,3 +62,19 @@ class ArrangeTest {
         assertEquals("work", computeArrangement(settled).groups.first { it.id == "sport" }.parentId)
     }
 }
+
+class SearchTest {
+    @org.junit.Test fun finds_title_and_note_with_path() {
+        val lists = listOf(com.sueleyman.suelostodo.data.TaskList(id = "l", name = "Umzug"))
+        val p = com.sueleyman.suelostodo.data.Task(id = "p", listId = "l", title = "Wohnung")
+        val c = com.sueleyman.suelostodo.data.Task(id = "c", listId = "l", parentId = "p", depth = 1, title = "Zähler", note = "Strom ablesen")
+        val d = com.sueleyman.suelostodo.data.Task(id = "d", listId = "l", title = "Strom kündigen", done = true)
+        val (ls, hits) = searchTasks("strom", false, listOf(p, c, d), lists)
+        org.junit.Assert.assertEquals(listOf("c"), hits.map { it.task.id })
+        org.junit.Assert.assertEquals("Umzug › Wohnung", hits.single().path)
+        org.junit.Assert.assertTrue(hits.single().inNote)
+        org.junit.Assert.assertEquals(2, searchTasks("STROM", true, listOf(p, c, d), lists).second.size)
+        org.junit.Assert.assertEquals(1, searchTasks("umz", false, listOf(p), lists).first.size)
+        org.junit.Assert.assertTrue(ls.isEmpty())
+    }
+}

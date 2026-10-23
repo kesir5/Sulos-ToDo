@@ -4,7 +4,7 @@ Angelehnt an Microsoft To Do, mit einklappbaren Aufgaben über drei Ebenen
 (Aufgabe → Unteraufgabe → Unter-Unteraufgabe), Anhängen, Home-Screen-Widget
 und optionaler Google-Drive-Synchronisation.
 
-**Stack:** Kotlin · Jetpack Compose (Material 3) · Room · Glance (Widget) · WorkManager · OkHttp · Google Identity
+**Stack:** Kotlin · Jetpack Compose (Material 3) · Room · klassisches RemoteViews-Widget · WorkManager · OkHttp · Google Identity
 
 ## Funktionen
 - Listen mit Farbthema, Smart-Listen *Mein Tag*, *Wichtig*, *Geplant*

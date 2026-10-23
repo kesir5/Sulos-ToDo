@@ -30,6 +30,7 @@ object WidgetPrefs {
         val sel = WidgetSel(
             source = p.getString("src_$id", null) ?: "list:$INBOX_ID",
             layout = p.getString("lay_$id", null) ?: WidgetLayout.COLOR.key,
+            picker = p.getBoolean("pick_$id", false),
         )
         state.value = state.value + (id to sel)
         return sel
@@ -40,9 +41,14 @@ object WidgetPrefs {
         return state.map { it[id] ?: WidgetSel() }.distinctUntilChanged()
     }
 
+    fun remove(c: Context, id: Int) {
+        sp(c).edit().remove("src_$id").remove("lay_$id").remove("pick_$id").apply()
+        state.value = state.value - id
+    }
+
     fun update(c: Context, id: Int, change: (WidgetSel) -> WidgetSel) {
         val new = change(get(c, id))
-        sp(c).edit().putString("src_$id", new.source).putString("lay_$id", new.layout).apply()
+        sp(c).edit().putString("src_$id", new.source).putString("lay_$id", new.layout).putBoolean("pick_$id", new.picker).apply()
         state.value = state.value + (id to new)
     }
 }

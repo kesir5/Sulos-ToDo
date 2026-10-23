@@ -36,3 +36,15 @@ class WidgetViewTest {
         assertEquals("Aufgaben", buildWidgetView("list:inbox", d).title)
     }
 }
+
+class WidgetHideDoneParentTest {
+    @Test fun subtasks_of_done_task_are_hidden() {
+        val open = listOf(
+            Task(id = "c1", listId = "l", parentId = "doneParent", depth = 1, title = "Kind von erledigt"),
+            Task(id = "g1", listId = "l", parentId = "c1", depth = 2, title = "Enkel"),
+            Task(id = "p", listId = "l", title = "Offen"),
+            Task(id = "c2", listId = "l", parentId = "p", depth = 1, title = "Kind von offen"),
+        )
+        assertEquals(listOf("Offen", "Kind von offen"), visibleOpenTasks(open).map { it.title })
+    }
+}

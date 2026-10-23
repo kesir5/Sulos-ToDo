@@ -18,6 +18,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.sueleyman.suelostodo.sync.SyncScheduler
 import com.sueleyman.suelostodo.ui.HomeScreen
+import com.sueleyman.suelostodo.ui.SearchScreen
 import com.sueleyman.suelostodo.ui.ArrangeScreen
 import com.sueleyman.suelostodo.ui.ListScreen
 import com.sueleyman.suelostodo.ui.SettingsScreen
@@ -25,6 +26,7 @@ import com.sueleyman.suelostodo.ui.TaskDetailScreen
 import com.sueleyman.suelostodo.ui.SuelosToDoTheme
 import com.sueleyman.suelostodo.ui.TransferScreen
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
@@ -66,7 +68,15 @@ class MainActivity : ComponentActivity() {
                             onOpenList = { nav.navigate("list/$it") },
                             onSettings = { nav.navigate("settings") },
                             onArrange = { nav.navigate("arrange") },
-                            onOpenTask = { nav.navigate("task/$it") }
+                            onOpenTask = { nav.navigate("task/$it") },
+                            onSearch = { nav.navigate("search") }
+                        )
+                    }
+                    composable("search") {
+                        SearchScreen(
+                            onBack = { nav.popBackStack() },
+                            onOpenTask = { nav.navigate("task/$it") },
+                            onOpenList = { nav.navigate("list/$it") }
                         )
                     }
                     composable(
@@ -103,6 +113,14 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // make sure placed widgets are (re)drawn whenever the app is opened
+        (application as SuelosToDoApp).appScope.launch {
+            runCatching { com.sueleyman.suelostodo.widget.TaskWidget.refresh(this@MainActivity) }
         }
     }
 

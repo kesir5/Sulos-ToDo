@@ -29,7 +29,7 @@ class SuelosToDoApp : Application() {
         )
         appScope.launch {
             repo.ensureInbox()
-            SyncScheduler.configurePeriodic(this@SuelosToDoApp)
+            runCatching { SyncScheduler.configurePeriodic(this@SuelosToDoApp) }
         }
     }
 

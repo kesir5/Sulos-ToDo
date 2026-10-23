@@ -47,6 +47,7 @@ import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.StarOutline
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.SwapVert
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.UnfoldLess
 import androidx.compose.material.icons.outlined.UnfoldMore
 import androidx.compose.material.icons.outlined.WbSunny
@@ -121,6 +122,7 @@ fun HomeScreen(
     onSettings: () -> Unit,
     onArrange: () -> Unit = {},
     onOpenTask: (String) -> Unit = {},
+    onSearch: () -> Unit = {},
 ) {
     val vm: HomeViewModel = viewModel { HomeViewModel() }
     val state by vm.state.collectAsStateWithLifecycle()
@@ -166,10 +168,11 @@ fun HomeScreen(
                     )
                 }
             }
-            if (style == HomeStyle.GREETING) GreetingHeader(state, userName, onSettings, onArrange, foldAll)
+            if (style == HomeStyle.GREETING) GreetingHeader(state, userName, onSettings, onArrange, foldAll, onSearch)
             else TopAppBar(
                 title = { Text("Sülos ToDo", fontWeight = FontWeight.SemiBold) },
                 actions = {
+                    IconButton(onClick = onSearch) { Icon(Icons.Outlined.Search, "Suchen") }
                     IconButton(onClick = onArrange) { Icon(Icons.Outlined.SwapVert, "Listen anordnen") }
                     foldAll?.invoke(MaterialTheme.colorScheme.onSurfaceVariant)
                     IconButton(onClick = onSettings) { Icon(Icons.Outlined.Settings, "Einstellungen") }
@@ -355,6 +358,7 @@ private fun SmartTiles(state: HomeState, open: (String) -> Unit) {
 private fun GreetingHeader(
     state: HomeState, name: String, onSettings: () -> Unit, onArrange: () -> Unit,
     foldAll: (@Composable (Color) -> Unit)?,
+    onSearch: () -> Unit,
 ) {
     val hour = LocalTime.now().hour
     val hello = when { hour < 11 -> "Guten Morgen"; hour < 18 -> "Guten Tag"; else -> "Guten Abend" }
@@ -375,6 +379,7 @@ private fun GreetingHeader(
                 color = Color.White.copy(alpha = 0.8f), style = MaterialTheme.typography.bodySmall, maxLines = 1
             )
         }
+        IconButton(onClick = onSearch) { Icon(Icons.Outlined.Search, "Suchen", tint = Color.White) }
         IconButton(onClick = onArrange) { Icon(Icons.Outlined.SwapVert, "Listen anordnen", tint = Color.White) }
         foldAll?.invoke(Color.White)
         IconButton(onClick = onSettings) { Icon(Icons.Outlined.Settings, "Einstellungen", tint = Color.White) }

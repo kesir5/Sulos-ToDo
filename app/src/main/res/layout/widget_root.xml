@@ -1,0 +1,164 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/w_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <ImageView
+        android:id="@+id/w_bg"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="fitXY"
+        android:src="@drawable/widget_bg"
+        android:importantForAccessibility="no" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical">
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+
+            <ImageView
+                android:id="@+id/w_head_bg"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="fitXY"
+                android:src="@drawable/widget_header_bg"
+                android:visibility="gone"
+                android:importantForAccessibility="no" />
+
+            <LinearLayout
+                android:id="@+id/w_head"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="14dp"
+                android:paddingTop="10dp"
+                android:paddingEnd="10dp"
+                android:paddingBottom="8dp">
+
+                <LinearLayout
+                    android:id="@+id/w_title_box"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/w_title"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:ellipsize="end"
+                        android:maxLines="1"
+                        android:textSize="17sp"
+                        android:textStyle="bold" />
+
+                    <ImageView
+                        android:id="@+id/w_drop"
+                        android:layout_width="22dp"
+                        android:layout_height="22dp"
+                        android:src="@drawable/ic_dropdown"
+                        android:contentDescription="Auswahl" />
+
+                    <TextView
+                        android:id="@+id/w_count"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textSize="12sp" />
+                </LinearLayout>
+
+                <FrameLayout
+                    android:id="@+id/w_add"
+                    android:layout_width="30dp"
+                    android:layout_height="30dp">
+
+                    <ImageView
+                        android:id="@+id/w_add_bg"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:src="@drawable/widget_dot"
+                        android:scaleType="fitXY"
+                        android:importantForAccessibility="no" />
+
+                    <ImageView
+                        android:id="@+id/w_add_icon"
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:layout_gravity="center"
+                        android:src="@drawable/ic_add"
+                        android:contentDescription="Neue Aufgabe" />
+                </FrameLayout>
+            </LinearLayout>
+        </FrameLayout>
+
+        <!-- compact: counters -->
+        <LinearLayout
+            android:id="@+id/w_counters"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp"
+            android:paddingBottom="4dp"
+            android:visibility="gone">
+
+            <TextView android:id="@+id/w_c1" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+                android:layout_marginEnd="4dp" android:background="@drawable/widget_pill" android:gravity="center" android:paddingTop="3dp" android:paddingBottom="3dp" android:textSize="11sp" />
+            <TextView android:id="@+id/w_c2" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+                android:layout_marginEnd="4dp" android:background="@drawable/widget_pill" android:gravity="center" android:paddingTop="3dp" android:paddingBottom="3dp" android:textSize="11sp" />
+            <TextView android:id="@+id/w_c3" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+                android:background="@drawable/widget_pill" android:gravity="center" android:paddingTop="3dp" android:paddingBottom="3dp" android:textSize="11sp" />
+        </LinearLayout>
+
+        <!-- picker: layout chips -->
+        <LinearLayout
+            android:id="@+id/w_chips"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp"
+            android:paddingBottom="6dp"
+            android:visibility="gone">
+
+            <TextView android:id="@+id/w_l1" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginEnd="4dp"
+                android:background="@drawable/widget_pill" android:gravity="center" android:paddingTop="5dp" android:paddingBottom="5dp" android:textSize="11sp" android:text="Farbe" />
+            <TextView android:id="@+id/w_l2" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginEnd="4dp"
+                android:background="@drawable/widget_pill" android:gravity="center" android:paddingTop="5dp" android:paddingBottom="5dp" android:textSize="11sp" android:text="Hell" />
+            <TextView android:id="@+id/w_l3" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginEnd="4dp"
+                android:background="@drawable/widget_pill" android:gravity="center" android:paddingTop="5dp" android:paddingBottom="5dp" android:textSize="11sp" android:text="Kompakt" />
+            <TextView android:id="@+id/w_l4" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+                android:background="@drawable/widget_pill" android:gravity="center" android:paddingTop="5dp" android:paddingBottom="5dp" android:textSize="11sp" android:text="Karten" />
+        </LinearLayout>
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1">
+
+            <ListView
+                android:id="@+id/w_list"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:divider="@null"
+                android:dividerHeight="0dp"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:paddingBottom="8dp"
+                android:clipToPadding="false" />
+
+            <TextView
+                android:id="@+id/w_empty"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:gravity="center"
+                android:text="Keine offenen Aufgaben"
+                android:textSize="13sp" />
+        </FrameLayout>
+    </LinearLayout>
+</FrameLayout>

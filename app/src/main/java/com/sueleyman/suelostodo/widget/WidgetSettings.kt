@@ -30,7 +30,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.glance.appwidget.GlanceAppWidgetManager
 import com.sueleyman.suelostodo.SuelosToDoApp
 import com.sueleyman.suelostodo.ui.orderedGroups
 import kotlinx.coroutines.launch
@@ -42,10 +41,7 @@ fun placedWidgetIds(c: Context): IntArray =
 /** Applies a selection and redraws the widget. */
 suspend fun applyWidgetSelection(c: Context, appWidgetId: Int, change: (WidgetSel) -> WidgetSel) {
     WidgetPrefs.update(c, appWidgetId, change)
-    runCatching {
-        val gid = GlanceAppWidgetManager(c).getGlanceIdBy(appWidgetId)
-        TaskWidget().update(c, gid)
-    }
+    runCatching { TaskWidget.update(c, appWidgetId) }
 }
 
 /** Settings section: choose content and layout for every placed widget (works independent of widget taps). */
@@ -78,7 +74,10 @@ fun WidgetSettingsSection() {
             Text("Widget ${i + 1}: ${label(sel.source)} · ${WidgetLayout.of(sel.layout).title.substringAfter("· ")}")
         }
     }
-    TextButton(onClick = { refresh++ }) { Text("Liste aktualisieren") }
+    Row {
+        TextButton(onClick = { refresh++ }) { Text("Liste aktualisieren") }
+        TextButton(onClick = { scope.launch { runCatching { TaskWidget.refresh(c) } } }) { Text("Widgets neu zeichnen") }
+    }
 
     editing?.let { id ->
         var src by remember(id) { mutableStateOf(WidgetPrefs.get(c, id).source) }

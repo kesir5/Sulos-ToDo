@@ -37,6 +37,11 @@ class Repository(
     fun observeAttachments(taskId: String): Flow<List<Attachment>> = dao.observeAttachments(taskId)
     fun observeTaskIdsWithAttachments() = dao.observeTaskIdsWithAttachments()
     suspend fun getLists() = dao.getLists()
+
+    /** Snapshot for the home-screen widget. */
+    suspend fun widgetData() = com.sueleyman.suelostodo.widget.WidgetData(
+        dao.getLists(), dao.getGroups(), dao.getOpenTasks(), loaded = true
+    )
     suspend fun getTask(id: String) = dao.getTask(id)
 
     suspend fun ensureInbox() {
