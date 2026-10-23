@@ -265,6 +265,7 @@ fun SettingsScreen(onBack: () -> Unit, onTransfer: () -> Unit = {}) {
             }
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
             Text("Widget", style = MaterialTheme.typography.titleMedium)
+            com.sueleyman.suelostodo.widget.WidgetSettingsSection()
             Text(
                 "Lange auf den Startbildschirm drücken → Widgets → Sülos ToDo. Tippe auf den Listennamen im Widget, " +
                     "um zur nächsten Liste zu wechseln; der Kreis hakt eine Aufgabe ab.",

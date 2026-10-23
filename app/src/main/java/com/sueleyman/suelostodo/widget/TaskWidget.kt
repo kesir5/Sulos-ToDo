@@ -158,13 +158,15 @@ class TaskWidget : GlanceAppWidget() {
         val data: Flow<WidgetData> = combine(repo.observeLists(), repo.observeGroups(), repo.observeOpenTasks()) { l, g, o ->
             WidgetData(l, g, o, loaded = true)
         }
+        val selFlow = WidgetPrefs.flow(context, appWidgetId)
+        val initialSel = WidgetPrefs.get(context, appWidgetId)
         provideContent {
-            val prefs = currentState<Preferences>()
             val d by data.collectAsState(initial = WidgetData())
-            val source = prefs[KEY_SOURCE] ?: prefs[KEY_LEGACY_LIST]?.let { "list:$it" } ?: "list:$INBOX_ID"
+            val sel by selFlow.collectAsState(initial = initialSel)
+            val source = sel.source
             val view = remember(source, d) { buildWidgetView(source, d) }
-            if (prefs[KEY_PICKER] == true) PickerContent(d, source, WidgetLayout.of(prefs[KEY_LAYOUT]))
-            else when (WidgetLayout.of(prefs[KEY_LAYOUT])) {
+            if (sel.picker) PickerContent(d, source, WidgetLayout.of(sel.layout))
+            else when (WidgetLayout.of(sel.layout)) {
                 WidgetLayout.COLOR -> WidgetContent(context, appWidgetId, view, d.loaded)
                 WidgetLayout.LIGHT -> LightContent(context, appWidgetId, view, d.loaded)
                 WidgetLayout.COMPACT -> CompactContent(context, appWidgetId, view, d.loaded)
@@ -539,16 +541,18 @@ private fun PickerContent(d: WidgetData, current: String, layout: WidgetLayout) 
     }
 }
 
+private fun widgetId(context: Context, glanceId: GlanceId) = GlanceAppWidgetManager(context).getAppWidgetId(glanceId)
+
 class OpenPickerAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
-        updateAppWidgetState(context, glanceId) { it[KEY_PICKER] = true }
+        WidgetPrefs.update(context, widgetId(context, glanceId)) { it.copy(picker = true) }
         TaskWidget().update(context, glanceId)
     }
 }
 
 class ClosePickerAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
-        updateAppWidgetState(context, glanceId) { it[KEY_PICKER] = false }
+        WidgetPrefs.update(context, widgetId(context, glanceId)) { it.copy(picker = false) }
         TaskWidget().update(context, glanceId)
     }
 }
@@ -556,7 +560,7 @@ class ClosePickerAction : ActionCallback {
 class SelectSourceAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
         val src = parameters[P_SOURCE] ?: return
-        updateAppWidgetState(context, glanceId) { it[KEY_SOURCE] = src; it[KEY_PICKER] = false }
+        WidgetPrefs.update(context, widgetId(context, glanceId)) { it.copy(source = src, picker = false) }
         TaskWidget().update(context, glanceId)
     }
 }
@@ -564,7 +568,7 @@ class SelectSourceAction : ActionCallback {
 class SelectLayoutAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
         val l = parameters[P_LAYOUT] ?: return
-        updateAppWidgetState(context, glanceId) { it[KEY_LAYOUT] = l }
+        WidgetPrefs.update(context, widgetId(context, glanceId)) { it.copy(layout = l) }
         TaskWidget().update(context, glanceId)
     }
 }
