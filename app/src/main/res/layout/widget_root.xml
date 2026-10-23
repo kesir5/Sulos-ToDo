@@ -96,6 +96,13 @@
             </LinearLayout>
         </FrameLayout>
 
+        <FrameLayout
+            android:id="@+id/w_head_line"
+            android:layout_width="match_parent"
+            android:layout_height="2dp"
+            android:background="#FFFFFFFF"
+            android:visibility="gone" />
+
         <!-- compact: counters -->
         <LinearLayout
             android:id="@+id/w_counters"

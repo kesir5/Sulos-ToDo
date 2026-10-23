@@ -50,6 +50,15 @@ private fun deep(c: Long): Int {
     return (0xFF000000L or (r shl 16) or (g shl 8) or b).toInt()
 }
 
+/** Mixes [over] with [alpha] (0..255) onto opaque [base]. */
+private fun blend(base: Int, over: Int, alpha: Int): Int {
+    fun ch(v: Int, s: Int) = (v shr s) and 0xFF
+    val r = (ch(base, 16) * (255 - alpha) + ch(over, 16) * alpha) / 255
+    val g = (ch(base, 8) * (255 - alpha) + ch(over, 8) * alpha) / 255
+    val b = (ch(base, 0) * (255 - alpha) + ch(over, 0) * alpha) / 255
+    return (0xFF shl 24) or (r shl 16) or (g shl 8) or b
+}
+
 /** Entry point used by the app to redraw widgets. */
 object TaskWidget {
     fun ids(c: Context): IntArray =
@@ -87,12 +96,17 @@ object TaskWidget {
         val bg: Int; val titleColor: Int; val subColor: Int; val plusBg: Int; val plusFg: Int; var headBg = false
         when {
             sel.picker -> { bg = WHITE; titleColor = INK; subColor = INK2; plusBg = 0xFFF1F0EC.toInt(); plusFg = INK }
-            layout == WidgetLayout.COLOR -> { bg = accent.toInt(); titleColor = WHITE; subColor = DIM; plusBg = 0x33FFFFFF; plusFg = WHITE }
-            layout == WidgetLayout.LIGHT -> { bg = WHITE; titleColor = WHITE; subColor = DIM; plusBg = 0x33FFFFFF; plusFg = WHITE; headBg = true }
-            layout == WidgetLayout.COMPACT -> { bg = WHITE; titleColor = INK; subColor = INK2; plusBg = (0x2E000000L or (accent and 0xFFFFFF)).toInt(); plusFg = deep(accent) }
+            layout.dark -> { bg = accent.toInt(); titleColor = WHITE; subColor = DIM; plusBg = 0x33FFFFFF; plusFg = WHITE }
+            layout == WidgetLayout.LIGHT || layout == WidgetLayout.ZEBRA -> { bg = WHITE; titleColor = WHITE; subColor = DIM; plusBg = 0x33FFFFFF; plusFg = WHITE; headBg = true }
+            layout == WidgetLayout.COMPACT || layout == WidgetLayout.LINES || layout == WidgetLayout.LEVELS ->
+                { bg = WHITE; titleColor = INK; subColor = INK2; plusBg = (0x2E000000L or (accent and 0xFFFFFF)).toInt(); plusFg = deep(accent) }
+            layout == WidgetLayout.TILES -> { bg = 0xFFF1ECE8.toInt(); titleColor = deep(accent); subColor = INK2; plusBg = accent.toInt(); plusFg = WHITE }
             else -> { bg = 0xFFFBF8F6.toInt(); titleColor = deep(accent); subColor = INK2; plusBg = accent.toInt(); plusFg = WHITE }
         }
         rv.setInt(R.id.w_bg, "setColorFilter", bg)
+        val headLine = !sel.picker && layout == WidgetLayout.LINES
+        rv.setViewVisibility(R.id.w_head_line, if (headLine) View.VISIBLE else View.GONE)
+        if (headLine) rv.setInt(R.id.w_head_line, "setBackgroundColor", accent.toInt())
         rv.setViewVisibility(R.id.w_head_bg, if (headBg) View.VISIBLE else View.GONE)
         if (headBg) rv.setInt(R.id.w_head_bg, "setColorFilter", accent.toInt())
 
@@ -138,18 +152,8 @@ object TaskWidget {
             if (due > 0) rv.setTextColor(R.id.w_c2, RED)
         }
 
-        // ---------- picker chips
-        rv.setViewVisibility(R.id.w_chips, if (sel.picker) View.VISIBLE else View.GONE)
-        if (sel.picker) {
-            listOf(R.id.w_l1, R.id.w_l2, R.id.w_l3, R.id.w_l4).zip(WidgetLayout.entries).forEachIndexed { i, (vid, l) ->
-                val on = l == layout
-                rv.setTextColor(vid, if (on) WHITE else INK)
-                rv.setInt(vid, "setBackgroundResource", R.drawable.widget_pill)
-                rv.setOnClickPendingIntent(vid, broadcast(c, id, ACTION_LAYOUT, 10 + i, l.key))
-                if (on) rv.setTextViewText(vid, "✓ " + listOf("Farbe", "Hell", "Kompakt", "Karten")[i])
-                else rv.setTextViewText(vid, listOf("Farbe", "Hell", "Kompakt", "Karten")[i])
-            }
-        }
+        // layout choice is part of the picker list (9 layouts)
+        rv.setViewVisibility(R.id.w_chips, View.GONE)
 
         // ---------- list
         val svc = Intent(c, WidgetListService::class.java)
@@ -158,7 +162,7 @@ object TaskWidget {
         @Suppress("DEPRECATION")
         rv.setRemoteAdapter(R.id.w_list, svc)
         rv.setEmptyView(R.id.w_list, R.id.w_empty)
-        rv.setTextColor(R.id.w_empty, if (!sel.picker && layout == WidgetLayout.COLOR) DIM else INK2)
+        rv.setTextColor(R.id.w_empty, if (!sel.picker && layout.dark) DIM else INK2)
         rv.setPendingIntentTemplate(
             R.id.w_list,
             PendingIntent.getActivity(
@@ -197,6 +201,11 @@ sealed interface WItem {
 /** Items shown in the widget list for the given selection. Pure function – unit-testable. */
 fun widgetItems(sel: WidgetSel, d: WidgetData): List<WItem> {
     if (sel.picker) return buildList {
+        add(WItem.Head("Layout"))
+        WidgetLayout.entries.forEach { l ->
+            add(WItem.Option("layout:${l.key}", (if (l.key == sel.layout || (sel.layout !in WidgetLayout.entries.map { it.key } && l == WidgetLayout.COLOR)) "✓ " else "") + l.title,
+                0xFF185FA5, 0, l == WidgetLayout.of(sel.layout)))
+        }
         add(WItem.Head("Smart-Listen"))
         listOf(
             Triple("smart:myday", "Mein Tag", 0xFF3B6EA5), Triple("smart:important", "Wichtig", 0xFFC4314B),
@@ -259,14 +268,16 @@ class WidgetFactory(private val c: Context, private val widgetId: Int) : RemoteV
     }
 
     override fun getCount() = items.size
-    override fun getViewTypeCount() = 4
+    override fun getViewTypeCount() = 5
     override fun hasStableIds() = true
     override fun getItemId(position: Int) = items.getOrNull(position)?.id ?: position.toLong()
     override fun getLoadingView(): RemoteViews? = null
 
     override fun getViewAt(position: Int): RemoteViews {
         val layout = WidgetLayout.of(sel.layout)
-        val dark = !sel.picker && layout == WidgetLayout.COLOR
+        val dark = !sel.picker && layout.dark
+        // index among task rows (for zebra shading)
+        val rowIndex = items.take(position).count { it is WItem.Row }
         return when (val it = items.getOrNull(position)) {
             is WItem.Section -> RemoteViews(c.packageName, R.layout.widget_item_section).apply {
                 setTextViewText(R.id.s_title, it.title)
@@ -285,23 +296,61 @@ class WidgetFactory(private val c: Context, private val widgetId: Int) : RemoteV
                 setInt(R.id.o_dot, "setColorFilter", it.color.toInt())
                 setInt(R.id.o_row, "setBackgroundColor", if (it.selected) 0xFFE6F1FB.toInt() else 0)
                 setViewPadding(R.id.o_row, (24 + it.indent * 40), 0, 16, 0)
-                setOnClickFillInIntent(R.id.o_row, Intent().putExtra(EXTRA_OP, "select").putExtra(EXTRA_SOURCE, it.key))
+                if (it.key.startsWith("layout:"))
+                    setOnClickFillInIntent(R.id.o_row, Intent().putExtra(EXTRA_OP, "layout").putExtra(EXTRA_SOURCE, it.key.removePrefix("layout:")))
+                else
+                    setOnClickFillInIntent(R.id.o_row, Intent().putExtra(EXTRA_OP, "select").putExtra(EXTRA_SOURCE, it.key))
             }
-            is WItem.Row -> RemoteViews(c.packageName, R.layout.widget_item_task).apply {
+            is WItem.Row -> RemoteViews(
+                c.packageName, if (layout == WidgetLayout.TILES) R.layout.widget_item_task_tile else R.layout.widget_item_task
+            ).apply {
                 val t = it.row.task
                 val accent = it.color.toInt()
                 val sub = t.depth > 0
-                setTextViewText(R.id.i_title, t.title + if (it.row.hasChildren && !t.expanded) "  (+${it.row.childCount})" else "")
+                val title = t.title + if (it.row.hasChildren && !t.expanded) "  (+${it.row.childCount})" else ""
+                if (layout == WidgetLayout.LEVELS && !sub)
+                    setTextViewText(R.id.i_title, android.text.SpannableString(title).apply {
+                        setSpan(android.text.style.StyleSpan(android.graphics.Typeface.BOLD), 0, length, 0)
+                    })
+                else setTextViewText(R.id.i_title, title)
                 setTextColor(R.id.i_title, if (dark) (if (sub) DIM else WHITE) else (if (sub) INK2 else INK))
                 setInt(R.id.i_title, "setMaxLines", if (it.single) 1 else 2)
                 setInt(R.id.i_check, "setColorFilter", if (dark) WHITE else accent)
                 setInt(R.id.i_star, "setColorFilter", if (dark) WHITE else accent)
                 setViewVisibility(R.id.i_star, if (t.important) View.VISIBLE else View.GONE)
-                val due = if (layout == WidgetLayout.LIGHT || layout == WidgetLayout.CARDS) dueLabel(t) else null
+                val showDue = layout in setOf(WidgetLayout.LIGHT, WidgetLayout.CARDS, WidgetLayout.LINES, WidgetLayout.ZEBRA,
+                    WidgetLayout.TILES, WidgetLayout.COLOR_LINES, WidgetLayout.LEVELS)
+                val due = if (showDue) dueLabel(t) else null
                 setViewVisibility(R.id.i_due, if (due != null) View.VISIBLE else View.GONE)
-                due?.let { (txt, hot) -> setTextViewText(R.id.i_due, txt); setTextColor(R.id.i_due, if (hot) RED else INK2) }
-                setViewPadding(R.id.i_row, 12 + t.depth * 44, 0, 12, 0)
-                if (layout == WidgetLayout.CARDS) setInt(R.id.i_row, "setBackgroundColor", WHITE)
+                due?.let { (txt, hot) ->
+                    setTextViewText(R.id.i_due, txt)
+                    setTextColor(R.id.i_due, if (dark) (if (hot) WHITE else DIM) else if (hot) RED else INK2)
+                }
+                val indent = t.depth * (if (layout == WidgetLayout.TILES) 36 else 44)
+                setViewPadding(R.id.i_row, 12 + indent, 0, 12, 0)
+                // ---- separation per layout
+                when (layout) {
+                    WidgetLayout.CARDS -> setInt(R.id.i_row, "setBackgroundColor", WHITE)
+                    WidgetLayout.LINES -> {
+                        setViewVisibility(R.id.i_div, View.VISIBLE)
+                        setInt(R.id.i_div, "setBackgroundColor", 0xFFE7E5E0.toInt())
+                    }
+                    WidgetLayout.COLOR_LINES -> {
+                        setViewVisibility(R.id.i_div, View.VISIBLE)
+                        setInt(R.id.i_div, "setBackgroundColor", 0x38FFFFFF)
+                    }
+                    WidgetLayout.ZEBRA -> setInt(R.id.i_row, "setBackgroundColor", if (rowIndex % 2 == 1) 0xFFF4F2EF.toInt() else WHITE)
+                    WidgetLayout.LEVELS -> {
+                        val tint = when (t.depth) { 0 -> 0x24; 1 -> 0x10; else -> 0x00 }
+                        val bgc = blend(WHITE, accent, tint)
+                        setInt(R.id.i_wrap, "setBackgroundColor", bgc)
+                        setViewVisibility(R.id.i_bar, View.VISIBLE)
+                        setInt(R.id.i_bar, "setBackgroundColor", (when (t.depth) { 0 -> 0xFF; 1 -> 0x99; else -> 0x55 } shl 24) or (accent and 0xFFFFFF))
+                        setViewPadding(R.id.i_row, 0, 0, 12, 0)
+                        setViewPadding(R.id.i_wrap, indent / 2, if (t.depth == 0 && rowIndex > 0) 6 else 0, 0, 0)
+                    }
+                    else -> {}
+                }
                 setOnClickFillInIntent(R.id.i_check, Intent().putExtra(EXTRA_OP, "toggle").putExtra(EXTRA_TASK, t.id))
                 setOnClickFillInIntent(R.id.i_title, Intent().putExtra(EXTRA_OP, "open").putExtra(EXTRA_TASK, t.id))
             }
@@ -361,6 +410,10 @@ class WidgetActionActivity : Activity() {
         when (intent.getStringExtra(EXTRA_OP)) {
             "toggle" -> intent.getStringExtra(EXTRA_TASK)?.let { t ->
                 app.appScope.launch { runCatching { app.repo.toggleDone(t); TaskWidget.updateAll(app) } }
+            }
+            "layout" -> intent.getStringExtra(EXTRA_SOURCE)?.let { l ->
+                WidgetPrefs.update(app, id) { it.copy(layout = l) }
+                app.appScope.launch { runCatching { TaskWidget.update(app, id) } }
             }
             "select" -> intent.getStringExtra(EXTRA_SOURCE)?.let { src ->
                 WidgetPrefs.update(app, id) { it.copy(source = src, picker = false) }
