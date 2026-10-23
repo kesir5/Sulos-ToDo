@@ -66,6 +66,23 @@ object TaskWidget {
 
     suspend fun refresh(c: Context) = updateAll(c)
 
+    /** Picker menu closes itself after 15 s without a choice (restarted by every layout tap). */
+    const val PICKER_TIMEOUT_MS = 15_000L
+    private val pickerTokens = java.util.concurrent.ConcurrentHashMap<Int, Long>()
+
+    fun schedulePickerTimeout(c: Context, id: Int) {
+        val app = c.applicationContext as SuelosToDoApp
+        val token = System.nanoTime()
+        pickerTokens[id] = token
+        app.appScope.launch {
+            kotlinx.coroutines.delay(PICKER_TIMEOUT_MS)
+            if (pickerTokens[id] == token && WidgetPrefs.get(app, id).picker) {
+                WidgetPrefs.update(app, id) { it.copy(picker = false) }
+                runCatching { update(app, id) }
+            }
+        }
+    }
+
     suspend fun updateAll(c: Context) {
         val ids = ids(c)
         if (ids.isEmpty()) return
@@ -204,7 +221,7 @@ object TaskWidget {
 
 sealed interface WItem {
     val id: Long
-    data class Section(val title: String, val color: Long) : WItem { override val id = ("s$title").hashCode().toLong() }
+    data class Section(val title: String, val color: Long, val listId: String? = null) : WItem { override val id = ("s$title").hashCode().toLong() }
     data class Row(val row: TreeRow, val color: Long, val single: Boolean) : WItem { override val id = row.task.id.hashCode().toLong() }
     data class Head(val label: String) : WItem { override val id = ("h$label").hashCode().toLong() }
     data class Option(val key: String, val label: String, val color: Long, val indent: Int, val selected: Boolean) : WItem {
@@ -244,7 +261,7 @@ fun widgetItems(sel: WidgetSel, d: WidgetData): List<WItem> {
             .sortedWith(compareBy({ it.first.task.dueDate ?: Long.MAX_VALUE }, { if (it.first.task.important) 0 else 1 }))
             .take(6).map { (r, c) -> WItem.Row(r.copy(hasChildren = false), c, true) }
         else -> v.sections.flatMap { s ->
-            (if (s.title != null) listOf(WItem.Section(s.title, s.color)) else emptyList()) + s.rows.map { WItem.Row(it, s.color, false) }
+            (if (s.title != null) listOf(WItem.Section(s.title, s.color, s.listId)) else emptyList()) + s.rows.map { WItem.Row(it, s.color, false) }
         }
     }
 }
@@ -294,6 +311,11 @@ class WidgetFactory(private val c: Context, private val widgetId: Int) : RemoteV
                 setTextViewText(R.id.s_title, it.title)
                 setTextColor(R.id.s_title, if (dark) DIM else deep(it.color))
                 setTextViewTextSize(R.id.s_title, android.util.TypedValue.COMPLEX_UNIT_SP, 10.5f * fs)
+                // tap on a list name opens this list in the app
+                it.listId?.let { lid ->
+                    setTextViewText(R.id.s_title, it.title + "  ›")
+                    setOnClickFillInIntent(R.id.s_title, Intent().putExtra(EXTRA_OP, "openlist").putExtra(EXTRA_SOURCE, lid))
+                }
             }
             is WItem.Head -> RemoteViews(c.packageName, R.layout.widget_item_section).apply {
                 setTextViewText(R.id.s_title, it.label)
@@ -393,11 +415,13 @@ class TaskWidgetReceiver : AppWidgetProvider() {
         when (intent.action) {
             ACTION_PICKER -> {
                 WidgetPrefs.update(context, id) { it.copy(picker = !it.picker) }
+                if (WidgetPrefs.get(context, id).picker) TaskWidget.schedulePickerTimeout(context, id)
                 redraw(context, id)
             }
             ACTION_LAYOUT -> {
                 val l = intent.getStringExtra(EXTRA_LAYOUT) ?: return
                 WidgetPrefs.update(context, id) { it.copy(layout = l) }
+                TaskWidget.schedulePickerTimeout(context, id)
                 redraw(context, id)
             }
             else -> super.onReceive(context, intent)
@@ -425,6 +449,15 @@ class WidgetActionActivity : Activity() {
             "layout" -> intent.getStringExtra(EXTRA_SOURCE)?.let { l ->
                 WidgetPrefs.update(app, id) { it.copy(layout = l) }
                 app.appScope.launch { runCatching { TaskWidget.update(app, id) } }
+                TaskWidget.schedulePickerTimeout(app, id)
+            }
+            "openlist" -> intent.getStringExtra(EXTRA_SOURCE)?.let { lid ->
+                startActivity(
+                    Intent(this, MainActivity::class.java)
+                        .putExtra(MainActivity.EXTRA_OPEN_LIST, lid)
+                        .setData(Uri.parse("suelostodo://list/$lid"))
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                )
             }
             "select" -> intent.getStringExtra(EXTRA_SOURCE)?.let { src ->
                 WidgetPrefs.update(app, id) { it.copy(source = src, picker = false) }

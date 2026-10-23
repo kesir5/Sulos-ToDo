@@ -33,6 +33,7 @@ class MainActivity : ComponentActivity() {
     private sealed interface Deeplink {
         data class OpenTask(val id: String) : Deeplink
         data class AddTo(val listId: String) : Deeplink
+        data class OpenList(val listId: String) : Deeplink
         data object Transfer : Deeplink
     }
 
@@ -57,6 +58,7 @@ class MainActivity : ComponentActivity() {
                         is Deeplink.AddTo -> nav.navigate("list/${l.listId}?add=true") {
                             popUpTo("home")
                         }
+                        is Deeplink.OpenList -> nav.navigate("list/${l.listId}") { popUpTo("home") }
                         Deeplink.Transfer -> if (nav.currentDestination?.route?.startsWith("transfer") != true) nav.navigate("transfer")
                         null -> {}
                     }
@@ -133,12 +135,14 @@ class MainActivity : ComponentActivity() {
         i ?: return
         if (i.getBooleanExtra(EXTRA_OPEN_TRANSFER, false)) { deeplink.value = Deeplink.Transfer; return }
         i.getStringExtra(EXTRA_TASK_ID)?.let { deeplink.value = Deeplink.OpenTask(it); return }
+        i.getStringExtra(EXTRA_OPEN_LIST)?.let { deeplink.value = Deeplink.OpenList(it); return }
         i.getStringExtra(EXTRA_ADD_TO_LIST)?.let { deeplink.value = Deeplink.AddTo(it) }
     }
 
     companion object {
         const val EXTRA_TASK_ID = "taskId"
         const val EXTRA_ADD_TO_LIST = "addToList"
+        const val EXTRA_OPEN_LIST = "openList"
         const val EXTRA_OPEN_TRANSFER = "openTransfer"
     }
 }

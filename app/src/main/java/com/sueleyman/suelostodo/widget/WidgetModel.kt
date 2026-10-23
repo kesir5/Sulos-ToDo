@@ -37,7 +37,7 @@ data class WidgetData(
 )
 
 /** One block of rows; [title] is shown as small section head (group view). */
-data class WidgetSection(val title: String?, val color: Long, val rows: List<TreeRow>)
+data class WidgetSection(val title: String?, val color: Long, val rows: List<TreeRow>, val listId: String? = null)
 
 data class WidgetView(
     val title: String,
@@ -71,7 +71,7 @@ fun buildWidgetView(source: String, data: WidgetData): WidgetView {
     val today = LocalDate.now().toEpochDay()
     fun listColor(l: TaskList?) = ListColors.argb(l?.color ?: 0)
     fun sectionFor(l: TaskList, title: String?) =
-        WidgetSection(title, listColor(l), flattenTree(d.open.filter { it.listId == l.id }))
+        WidgetSection(title, listColor(l), flattenTree(d.open.filter { it.listId == l.id }), l.id)
 
     return when (type) {
         "group" -> {
