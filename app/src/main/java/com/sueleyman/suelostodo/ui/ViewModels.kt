@@ -164,6 +164,11 @@ class HomeViewModel : ViewModel() {
     fun renameGroup(id: String, name: String) = viewModelScope.launch { repo.renameGroup(id, name) }
     fun dissolveGroup(id: String) = viewModelScope.launch { repo.dissolveGroup(id) }
     fun toggleDone(taskId: String) = viewModelScope.launch { repo.toggleDone(taskId) }
+    /** Collapses all groups if every group is open, otherwise opens all. */
+    fun toggleAllGroups() = viewModelScope.launch {
+        val g = state.value.groups
+        repo.setAllGroupsExpanded(!(g.isNotEmpty() && g.all { it.expanded }))
+    }
     fun setGroupColor(id: String, color: Long?) = viewModelScope.launch { repo.setGroupColor(id, color) }
     fun toggleGroupId(id: String) = viewModelScope.launch {
         state.value.groups.firstOrNull { it.id == id }?.let { repo.setGroupExpanded(it.id, !it.expanded) }

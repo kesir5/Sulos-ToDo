@@ -47,6 +47,8 @@ import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.StarOutline
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.SwapVert
+import androidx.compose.material.icons.outlined.UnfoldLess
+import androidx.compose.material.icons.outlined.UnfoldMore
 import androidx.compose.material.icons.outlined.WbSunny
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -149,11 +151,21 @@ fun HomeScreen(
         containerColor = if (style == HomeStyle.TILES || style == HomeStyle.DASHBOARD || style == HomeStyle.GRID)
             MaterialTheme.colorScheme.background else MaterialTheme.colorScheme.surface,
         topBar = {
-            if (style == HomeStyle.GREETING) GreetingHeader(state, userName, onSettings, onArrange)
+            val allOpen = state.groups.isNotEmpty() && state.groups.all { it.expanded }
+            val foldAll: (@Composable (Color) -> Unit)? = if (state.groups.isEmpty()) null else { tint ->
+                IconButton(onClick = { vm.toggleAllGroups() }) {
+                    Icon(
+                        if (allOpen) Icons.Outlined.UnfoldLess else Icons.Outlined.UnfoldMore,
+                        if (allOpen) "Alle Gruppen einklappen" else "Alle Gruppen ausklappen", tint = tint
+                    )
+                }
+            }
+            if (style == HomeStyle.GREETING) GreetingHeader(state, userName, onSettings, onArrange, foldAll)
             else TopAppBar(
                 title = { Text("Sülos ToDo", fontWeight = FontWeight.SemiBold) },
                 actions = {
                     IconButton(onClick = onArrange) { Icon(Icons.Outlined.SwapVert, "Listen anordnen") }
+                    foldAll?.invoke(MaterialTheme.colorScheme.onSurfaceVariant)
                     IconButton(onClick = onSettings) { Icon(Icons.Outlined.Settings, "Einstellungen") }
                 }
             )
@@ -334,7 +346,10 @@ private fun SmartTiles(state: HomeState, open: (String) -> Unit) {
 }
 
 @Composable
-private fun GreetingHeader(state: HomeState, name: String, onSettings: () -> Unit, onArrange: () -> Unit) {
+private fun GreetingHeader(
+    state: HomeState, name: String, onSettings: () -> Unit, onArrange: () -> Unit,
+    foldAll: (@Composable (Color) -> Unit)?,
+) {
     val hour = LocalTime.now().hour
     val hello = when { hour < 11 -> "Guten Morgen"; hour < 18 -> "Guten Tag"; else -> "Guten Abend" }
     val today = when (state.todayCount) { 0 -> "nichts fällig"; 1 -> "1 Aufgabe für heute"; else -> "${state.todayCount} Aufgaben für heute" }
@@ -355,6 +370,7 @@ private fun GreetingHeader(state: HomeState, name: String, onSettings: () -> Uni
             )
         }
         IconButton(onClick = onArrange) { Icon(Icons.Outlined.SwapVert, "Listen anordnen", tint = Color.White) }
+        foldAll?.invoke(Color.White)
         IconButton(onClick = onSettings) { Icon(Icons.Outlined.Settings, "Einstellungen", tint = Color.White) }
     }
 }

@@ -62,6 +62,9 @@ interface TaskDao {
     @Query("SELECT * FROM list_groups")
     suspend fun allGroupsRaw(): List<ListGroup>
 
+    @Query("UPDATE list_groups SET expanded = :expanded")
+    suspend fun setAllGroupsExpanded(expanded: Boolean)
+
     @Query("UPDATE list_groups SET expanded = :expanded WHERE id = :id")
     suspend fun setGroupExpanded(id: String, expanded: Boolean)
 

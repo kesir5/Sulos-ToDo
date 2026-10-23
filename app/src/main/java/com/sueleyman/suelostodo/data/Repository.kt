@@ -105,6 +105,8 @@ class Repository(
         changed()
     }
 
+    suspend fun setAllGroupsExpanded(expanded: Boolean) = dao.setAllGroupsExpanded(expanded)
+
     suspend fun setGroupExpanded(id: String, expanded: Boolean) {
         dao.setGroupExpanded(id, expanded)
     }
