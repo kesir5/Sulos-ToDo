@@ -65,4 +65,10 @@
         android:layout_height="1dp"
         android:background="#FFE7E5E0"
         android:visibility="gone" />
+
+    <FrameLayout
+        android:id="@+id/i_div_thick"
+        android:layout_width="match_parent"
+        android:layout_height="3dp"
+        android:visibility="gone" />
 </LinearLayout>

@@ -23,6 +23,12 @@ object WidgetPrefs {
     private val state = MutableStateFlow<Map<Int, WidgetSel>>(emptyMap())
     private fun sp(c: Context) = c.getSharedPreferences("widgets", Context.MODE_PRIVATE)
 
+    /** Font sizes for all widgets. */
+    val FONT_STEPS = listOf(0.85f to "Klein", 1.0f to "Normal", 1.15f to "Groß", 1.3f to "Sehr groß")
+
+    fun fontScale(c: Context): Float = sp(c).getFloat("font_scale", 1.0f)
+    fun setFontScale(c: Context, v: Float) = sp(c).edit().putFloat("font_scale", v).apply()
+
     fun get(c: Context, id: Int): WidgetSel = state.value[id] ?: load(c, id)
 
     private fun load(c: Context, id: Int): WidgetSel {

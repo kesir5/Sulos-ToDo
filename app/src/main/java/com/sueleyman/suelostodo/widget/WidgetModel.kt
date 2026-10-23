@@ -13,17 +13,19 @@ enum class WidgetLayout(val key: String, val title: String, val description: Str
     COLOR("color", "1 · Farbfläche", "Ganze Fläche in der Gruppenfarbe, weiße Schrift"),
     LIGHT("light", "2 · Hell mit Farbkopf", "Weiße Karte, farbiger Kopfbalken, Fälligkeit rechts"),
     COMPACT("compact", "3 · Kompakt mit Zählern", "Zähler oben, dringendste Aufgaben einzeilig – für kleine Widgets"),
-    CARDS("cards", "4 · Karten je Liste", "Jede Liste als eigene Karte – für große Widgets"),
-    LINES("lines", "5 · Trennlinien", "Weiß, feine Linie zwischen allen Einträgen"),
-    ZEBRA("zebra", "6 · Zebra", "Zeilen abwechselnd weiß / hellgrau, farbiger Kopf"),
-    TILES("tiles", "7 · Kachelzeilen", "Jeder Eintrag als eigene Kachel auf getöntem Grund"),
-    COLOR_LINES("colorlines", "8 · Farbfläche mit Linien", "Farbfläche mit hellen Trennlinien"),
-    LEVELS("levels", "9 · Ebenen-Schattierung", "Hauptaufgaben fett mit Farbbalken, Unteraufgaben heller");
+    LINES("lines", "4 · Trennlinien", "Weiß, feine Linie zwischen allen Einträgen"),
+    ZEBRA("zebra", "5 · Zebra", "Zeilen abwechselnd weiß / hellgrau, farbiger Kopf"),
+    TILES("tiles", "6 · Kachelzeilen", "Jeder Eintrag als eigene Kachel auf getöntem Grund"),
+    COLOR_LINES("colorlines", "7 · Farbfläche mit Linien", "Farbfläche mit kräftigen hellen Trennlinien"),
+    LEVELS("levels", "8 · Ebenen-Schattierung", "Hauptaufgaben fett mit Farbbalken, Unteraufgaben heller");
 
     /** layouts with white text on the group colour */
     val dark get() = this == COLOR || this == COLOR_LINES
 
-    companion object { fun of(key: String?) = entries.firstOrNull { it.key == key } ?: COLOR }
+    companion object {
+        /** "cards" was removed – such widgets fall back to "Trennlinien". */
+        fun of(key: String?) = entries.firstOrNull { it.key == key } ?: if (key == "cards") LINES else COLOR
+    }
 }
 
 /** Everything a widget needs, loaded from the database. */

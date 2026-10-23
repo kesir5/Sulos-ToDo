@@ -93,6 +93,14 @@
                         android:src="@drawable/ic_add"
                         android:contentDescription="Neue Aufgabe" />
                 </FrameLayout>
+
+                <ImageView
+                    android:id="@+id/w_app"
+                    android:layout_width="30dp"
+                    android:layout_height="30dp"
+                    android:layout_marginStart="6dp"
+                    android:src="@mipmap/ic_launcher"
+                    android:contentDescription="App öffnen" />
             </LinearLayout>
         </FrameLayout>
 

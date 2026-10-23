@@ -113,6 +113,20 @@ object TaskWidget {
         // ---------- header
         rv.setTextViewText(R.id.w_title, if (sel.picker) "Anzeigen …" else v.title)
         rv.setTextColor(R.id.w_title, titleColor)
+        val fs = WidgetPrefs.fontScale(c)
+        rv.setTextViewTextSize(R.id.w_title, android.util.TypedValue.COMPLEX_UNIT_SP, 17f * fs)
+        rv.setTextViewTextSize(R.id.w_count, android.util.TypedValue.COMPLEX_UNIT_SP, 12f * fs)
+        rv.setTextViewTextSize(R.id.w_empty, android.util.TypedValue.COMPLEX_UNIT_SP, 13f * fs)
+        listOf(R.id.w_c1, R.id.w_c2, R.id.w_c3).forEach { rv.setTextViewTextSize(it, android.util.TypedValue.COMPLEX_UNIT_SP, 11f * fs) }
+        rv.setOnClickPendingIntent(
+            R.id.w_app,
+            PendingIntent.getActivity(
+                c, id * 10 + 4,
+                Intent(c, MainActivity::class.java).setAction(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+        )
         rv.setTextViewText(R.id.w_count, if (sel.picker) "" else " ${v.count}")
         rv.setTextColor(R.id.w_count, subColor)
         rv.setViewVisibility(R.id.w_drop, if (sel.picker) View.GONE else View.VISIBLE)
@@ -229,10 +243,6 @@ fun widgetItems(sel: WidgetSel, d: WidgetData): List<WItem> {
         WidgetLayout.COMPACT -> v.sections.flatMap { s -> s.rows.filter { it.task.depth == 0 }.map { it to s.color } }
             .sortedWith(compareBy({ it.first.task.dueDate ?: Long.MAX_VALUE }, { if (it.first.task.important) 0 else 1 }))
             .take(6).map { (r, c) -> WItem.Row(r.copy(hasChildren = false), c, true) }
-        WidgetLayout.CARDS -> v.sections.flatMap { s ->
-            listOf(WItem.Section("${s.title ?: v.title}  ·  ${s.rows.count { it.task.depth == 0 }}", s.color)) +
-                s.rows.map { WItem.Row(it, s.color, false) }
-        }
         else -> v.sections.flatMap { s ->
             (if (s.title != null) listOf(WItem.Section(s.title, s.color)) else emptyList()) + s.rows.map { WItem.Row(it, s.color, false) }
         }
@@ -276,23 +286,23 @@ class WidgetFactory(private val c: Context, private val widgetId: Int) : RemoteV
     override fun getViewAt(position: Int): RemoteViews {
         val layout = WidgetLayout.of(sel.layout)
         val dark = !sel.picker && layout.dark
+        val fs = WidgetPrefs.fontScale(c)
         // index among task rows (for zebra shading)
         val rowIndex = items.take(position).count { it is WItem.Row }
         return when (val it = items.getOrNull(position)) {
             is WItem.Section -> RemoteViews(c.packageName, R.layout.widget_item_section).apply {
                 setTextViewText(R.id.s_title, it.title)
                 setTextColor(R.id.s_title, if (dark) DIM else deep(it.color))
-                if (layout == WidgetLayout.CARDS) {
-                    setInt(R.id.s_title, "setBackgroundColor", WHITE)
-                    setViewPadding(R.id.s_title, 24, 26, 24, 6)
-                }
+                setTextViewTextSize(R.id.s_title, android.util.TypedValue.COMPLEX_UNIT_SP, 10.5f * fs)
             }
             is WItem.Head -> RemoteViews(c.packageName, R.layout.widget_item_section).apply {
                 setTextViewText(R.id.s_title, it.label)
+                setTextViewTextSize(R.id.s_title, android.util.TypedValue.COMPLEX_UNIT_SP, 10.5f * fs)
                 setTextColor(R.id.s_title, INK2)
             }
             is WItem.Option -> RemoteViews(c.packageName, R.layout.widget_item_option).apply {
                 setTextViewText(R.id.o_label, it.label)
+                setTextViewTextSize(R.id.o_label, android.util.TypedValue.COMPLEX_UNIT_SP, 14f * fs)
                 setInt(R.id.o_dot, "setColorFilter", it.color.toInt())
                 setInt(R.id.o_row, "setBackgroundColor", if (it.selected) 0xFFE6F1FB.toInt() else 0)
                 setViewPadding(R.id.o_row, (24 + it.indent * 40), 0, 16, 0)
@@ -315,10 +325,12 @@ class WidgetFactory(private val c: Context, private val widgetId: Int) : RemoteV
                 else setTextViewText(R.id.i_title, title)
                 setTextColor(R.id.i_title, if (dark) (if (sub) DIM else WHITE) else (if (sub) INK2 else INK))
                 setInt(R.id.i_title, "setMaxLines", if (it.single) 1 else 2)
+                setTextViewTextSize(R.id.i_title, android.util.TypedValue.COMPLEX_UNIT_SP, (if (it.single) 13f else 14f) * fs)
+                setTextViewTextSize(R.id.i_due, android.util.TypedValue.COMPLEX_UNIT_SP, 11f * fs)
                 setInt(R.id.i_check, "setColorFilter", if (dark) WHITE else accent)
                 setInt(R.id.i_star, "setColorFilter", if (dark) WHITE else accent)
                 setViewVisibility(R.id.i_star, if (t.important) View.VISIBLE else View.GONE)
-                val showDue = layout in setOf(WidgetLayout.LIGHT, WidgetLayout.CARDS, WidgetLayout.LINES, WidgetLayout.ZEBRA,
+                val showDue = layout in setOf(WidgetLayout.LIGHT, WidgetLayout.LINES, WidgetLayout.ZEBRA,
                     WidgetLayout.TILES, WidgetLayout.COLOR_LINES, WidgetLayout.LEVELS)
                 val due = if (showDue) dueLabel(t) else null
                 setViewVisibility(R.id.i_due, if (due != null) View.VISIBLE else View.GONE)
@@ -330,14 +342,13 @@ class WidgetFactory(private val c: Context, private val widgetId: Int) : RemoteV
                 setViewPadding(R.id.i_row, 12 + indent, 0, 12, 0)
                 // ---- separation per layout
                 when (layout) {
-                    WidgetLayout.CARDS -> setInt(R.id.i_row, "setBackgroundColor", WHITE)
                     WidgetLayout.LINES -> {
                         setViewVisibility(R.id.i_div, View.VISIBLE)
                         setInt(R.id.i_div, "setBackgroundColor", 0xFFE7E5E0.toInt())
                     }
                     WidgetLayout.COLOR_LINES -> {
-                        setViewVisibility(R.id.i_div, View.VISIBLE)
-                        setInt(R.id.i_div, "setBackgroundColor", 0x38FFFFFF)
+                        setViewVisibility(R.id.i_div_thick, View.VISIBLE)
+                        setInt(R.id.i_div_thick, "setBackgroundColor", 0x66FFFFFF)
                     }
                     WidgetLayout.ZEBRA -> setInt(R.id.i_row, "setBackgroundColor", if (rowIndex % 2 == 1) 0xFFF4F2EF.toInt() else WHITE)
                     WidgetLayout.LEVELS -> {

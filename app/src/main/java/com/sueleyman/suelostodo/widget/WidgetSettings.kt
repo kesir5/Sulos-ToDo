@@ -30,6 +30,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.sueleyman.suelostodo.SuelosToDoApp
 import com.sueleyman.suelostodo.ui.orderedGroups
 import kotlinx.coroutines.launch
@@ -64,6 +65,28 @@ fun WidgetSettingsSection() {
             else -> lists.firstOrNull { it.id == id }?.name ?: "Aufgaben"
         }
     }
+
+    // ---- font size for all widgets
+    var font by remember { mutableStateOf(WidgetPrefs.fontScale(c)) }
+    Text("Schriftgröße im Widget", fontWeight = FontWeight.Bold)
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        WidgetPrefs.FONT_STEPS.forEach { (v, name) ->
+            Row(
+                Modifier.weight(1f).clickable {
+                    font = v; WidgetPrefs.setFontScale(c, v)
+                    scope.launch { runCatching { TaskWidget.updateAll(c) } }
+                },
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                RadioButton(selected = font == v, onClick = {
+                    font = v; WidgetPrefs.setFontScale(c, v)
+                    scope.launch { runCatching { TaskWidget.updateAll(c) } }
+                })
+                Text(name, style = MaterialTheme.typography.bodySmall)
+            }
+        }
+    }
+    Text("Abc – Beispieltext", fontSize = (14 * font).sp, modifier = Modifier.padding(start = 12.dp, bottom = 8.dp))
 
     if (ids.isEmpty()) {
         Text("Noch kein Widget auf dem Startbildschirm platziert.", style = MaterialTheme.typography.bodySmall)
