@@ -88,11 +88,10 @@ fun SettingsScreen(onBack: () -> Unit, onTransfer: () -> Unit = {}) {
     }
 
     val authLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { res ->
-        if (res.resultCode == Activity.RESULT_OK) {
-            runCatching { Identity.getAuthorizationClient(context).getAuthorizationResultFromIntent(res.data) }
-                .onSuccess { if (it.accessToken != null) onAuthorized() else connectError = "Kein Zugriffstoken erhalten" }
-                .onFailure { connectError = it.message }
-        } else connectError = "Anmeldung abgebrochen"
+        // Even when cancelled, the result intent usually carries the real reason (ApiException status code).
+        runCatching { Identity.getAuthorizationClient(context).getAuthorizationResultFromIntent(res.data) }
+            .onSuccess { if (it.accessToken != null) onAuthorized() else connectError = "Kein Zugriffstoken erhalten" }
+            .onFailure { connectError = com.sueleyman.suelostodo.sync.GoogleAuth.explain(it, res.resultCode == Activity.RESULT_OK) }
     }
 
     fun connect() {
@@ -105,7 +104,7 @@ fun SettingsScreen(onBack: () -> Unit, onTransfer: () -> Unit = {}) {
                         authLauncher.launch(IntentSenderRequest.Builder(pi.intentSender).build())
                     } else onAuthorized()
                 }
-                .onFailure { connectError = "Verbindung fehlgeschlagen: ${it.message}" }
+                .onFailure { connectError = com.sueleyman.suelostodo.sync.GoogleAuth.explain(it, true) }
         }
     }
 
@@ -243,6 +242,17 @@ fun SettingsScreen(onBack: () -> Unit, onTransfer: () -> Unit = {}) {
                 }) { Text("Verbindung trennen") }
             }
             connectError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+            // data needed for the Android OAuth client in Google Cloud
+            val sha1 = remember { com.sueleyman.suelostodo.sync.GoogleAuth.signingSha1(context) }
+            val clip = androidx.compose.ui.platform.LocalClipboardManager.current
+            Text(
+                "Für die Einrichtung in Google Cloud (Android-OAuth-Client):\nPaketname: ${context.packageName}\nSHA-1: $sha1",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            androidx.compose.material3.TextButton(onClick = {
+                clip.setText(androidx.compose.ui.text.AnnotatedString(sha1))
+                android.widget.Toast.makeText(context, "SHA-1 kopiert", android.widget.Toast.LENGTH_SHORT).show()
+            }) { Text("SHA-1 kopieren") }
 
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
             Text("Erinnerungen", style = MaterialTheme.typography.titleMedium)

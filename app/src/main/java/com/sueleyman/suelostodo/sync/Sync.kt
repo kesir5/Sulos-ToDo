@@ -23,6 +23,32 @@ import kotlinx.serialization.json.Json
 import java.util.concurrent.TimeUnit
 
 object GoogleAuth {
+    /** SHA-1 of the certificate this APK is signed with (needed for the Google Cloud OAuth client). */
+    fun signingSha1(c: android.content.Context): String = runCatching {
+        val pm = c.packageManager
+        val sigs = if (android.os.Build.VERSION.SDK_INT >= 28)
+            pm.getPackageInfo(c.packageName, android.content.pm.PackageManager.GET_SIGNING_CERTIFICATES).signingInfo!!.apkContentsSigners
+        else @Suppress("DEPRECATION") pm.getPackageInfo(c.packageName, android.content.pm.PackageManager.GET_SIGNATURES).signatures!!
+        val md = java.security.MessageDigest.getInstance("SHA-1").digest(sigs[0].toByteArray())
+        md.joinToString(":") { "%02X".format(it) }
+    }.getOrDefault("unbekannt")
+
+    /** Human readable reason for a failed Google sign-in. */
+    fun explain(e: Throwable, wasOk: Boolean): String {
+        val code = (e as? com.google.android.gms.common.api.ApiException)?.statusCode
+        return when (code) {
+            10 -> "Google meldet DEVELOPER_ERROR (Code 10): In Google Cloud fehlt ein Android-OAuth-Client für diese App – " +
+                "Paketname und SHA-1 (siehe unten) müssen exakt passen, und die Google Drive API muss aktiviert sein."
+            16, 12501 -> "Anmeldung abgebrochen (Code $code). Falls du nichts abgebrochen hast: meist fehlt die Einrichtung in Google Cloud " +
+                "(OAuth-Client mit Paketname + SHA-1, Testnutzer im OAuth-Zustimmungsbildschirm)."
+            7 -> "Keine Internetverbindung (Code 7)."
+            8, 13 -> "Interner Google-Fehler (Code $code) – bitte später erneut versuchen."
+            null -> if (wasOk) "Verbindung fehlgeschlagen: ${e.message}"
+                else "Anmeldung abgebrochen – meist fehlt die Einrichtung in Google Cloud (OAuth-Client mit Paketname + SHA-1)."
+            else -> "Google-Anmeldung fehlgeschlagen (Code $code): ${e.message}"
+        }
+    }
+
     const val SCOPE_APPDATA = "https://www.googleapis.com/auth/drive.appdata"
 
     fun request(): AuthorizationRequest =
