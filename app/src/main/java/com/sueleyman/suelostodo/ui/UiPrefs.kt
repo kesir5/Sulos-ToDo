@@ -25,6 +25,8 @@ enum class HomeStyle(val title: String, val description: String) {
     ACCENT("3 · Farbakzent", "Gruppenkopf in Gruppenfarbe mit Akzentbalken"),
     GREETING("4 · Begrüßungskopf", "Kopf mit Begrüßung, Smart-Listen als Chips"),
     DASHBOARD("5 · Dashboard", "Mein-Tag-Fortschritt, Gruppen mit Fortschrittsbalken"),
+    FOCUS("6 · Fokus", "Karte „Als Nächstes“ mit den 3 dringendsten Aufgaben"),
+    GRID("7 · Raster", "Listen als Kacheln, Gruppen als farbige Abschnitte"),
 }
 
 object UiPrefs {

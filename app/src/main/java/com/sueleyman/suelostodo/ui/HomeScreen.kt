@@ -114,7 +114,12 @@ private fun Color.deep(): Color = Color(red = red * 0.7f, green = green * 0.7f, 
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(onOpenList: (String) -> Unit, onSettings: () -> Unit, onArrange: () -> Unit = {}) {
+fun HomeScreen(
+    onOpenList: (String) -> Unit,
+    onSettings: () -> Unit,
+    onArrange: () -> Unit = {},
+    onOpenTask: (String) -> Unit = {},
+) {
     val vm: HomeViewModel = viewModel { HomeViewModel() }
     val state by vm.state.collectAsStateWithLifecycle()
     val style by UiPrefs.homeStyle.collectAsState()
@@ -141,7 +146,7 @@ fun HomeScreen(onOpenList: (String) -> Unit, onSettings: () -> Unit, onArrange: 
     )
 
     Scaffold(
-        containerColor = if (style == HomeStyle.TILES || style == HomeStyle.DASHBOARD)
+        containerColor = if (style == HomeStyle.TILES || style == HomeStyle.DASHBOARD || style == HomeStyle.GRID)
             MaterialTheme.colorScheme.background else MaterialTheme.colorScheme.surface,
         topBar = {
             if (style == HomeStyle.GREETING) GreetingHeader(state, userName, onSettings, onArrange)
@@ -179,11 +184,23 @@ fun HomeScreen(onOpenList: (String) -> Unit, onSettings: () -> Unit, onArrange: 
             when (style) {
                 HomeStyle.TILES -> item { SmartTiles(state, onOpenList) }
                 HomeStyle.GREETING -> {
-                    item { Spacer(Modifier.height(4.dp)) }
-                    compactSmartRows(state, onOpenList)
+                    item { GreetingButtons(state, onOpenList) }
                     item { HorizontalDivider(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) }
+                    // "Aufgaben" as a normal list on top
+                    state.lists.firstOrNull { it.id == INBOX_ID }?.let { inbox ->
+                        item(key = "inbox") { ListNavRow(inbox, 0, style, null, actions) }
+                    }
                 }
                 HomeStyle.DASHBOARD -> item { DashboardCard(state, onOpenList) }
+                HomeStyle.FOCUS -> {
+                    item { FocusCard(state, onOpenList, onOpenTask) { vm.toggleDone(it) } }
+                    item { FocusCounters(state, onOpenList) }
+                    item { SectionHead("Listen") }
+                    state.lists.firstOrNull { it.id == INBOX_ID }?.let { inbox ->
+                        item(key = "inbox") { ListNavRow(inbox, 0, style, null, actions) }
+                    }
+                }
+                HomeStyle.GRID -> item { GridSmartTiles(state, onOpenList) }
                 else -> smartRows(state, onOpenList)
             }
             if (style == HomeStyle.BANDS || style == HomeStyle.ACCENT) item { Spacer(Modifier.height(6.dp)) }
@@ -193,12 +210,16 @@ fun HomeScreen(onOpenList: (String) -> Unit, onSettings: () -> Unit, onArrange: 
                 Box(Modifier.animateItem()) {
                     when (style) {
                         HomeStyle.TILES -> GroupCard(node, actions)
+                        HomeStyle.GRID -> GridSection(node, actions)
                         else -> GroupBlock(node, style, actions)
                     }
                 }
             }
             // ---- lists without group
-            items(state.tree.loose, key = { "l" + it.id }) { l ->
+            if (style == HomeStyle.GRID) {
+                val loose = listOfNotNull(state.lists.firstOrNull { it.id == INBOX_ID }) + state.tree.loose
+                if (loose.isNotEmpty()) item(key = "grid-loose") { GridLoose(loose, actions) }
+            } else items(state.tree.loose, key = { "l" + it.id }) { l ->
                 Box(Modifier.animateItem()) { ListNavRow(l, 0, style, null, actions) }
             }
             item { Spacer(Modifier.height(12.dp)) }
@@ -335,6 +356,271 @@ private fun GreetingHeader(state: HomeState, name: String, onSettings: () -> Uni
         }
         IconButton(onClick = onArrange) { Icon(Icons.Outlined.SwapVert, "Listen anordnen", tint = Color.White) }
         IconButton(onClick = onSettings) { Icon(Icons.Outlined.Settings, "Einstellungen", tint = Color.White) }
+    }
+}
+
+/** Greeting layout: four slim one-line buttons (number + name). */
+@Composable
+private fun GreetingButtons(state: HomeState, open: (String) -> Unit) {
+    val surface = MaterialTheme.colorScheme.surface
+    val dueColor = if (state.overdueCount > 0) SmartColors.overdue else SmartColors.due
+    val items = listOf(
+        Triple(SmartList.MY_DAY, SmartColors.myDay, state.smartCounts[SmartList.MY_DAY] ?: 0),
+        Triple(SmartList.IMPORTANT, SmartColors.important, state.smartCounts[SmartList.IMPORTANT] ?: 0),
+        Triple(SmartList.PLANNED, SmartColors.planned, state.smartCounts[SmartList.PLANNED] ?: 0),
+        Triple(SmartList.DUE, dueColor, state.smartCounts[SmartList.DUE] ?: 0),
+    )
+    Row(Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, top = 7.dp, bottom = 3.dp), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+        items.forEach { (sl, color, n) ->
+            Row(
+                Modifier.weight(1f).clip(RoundedCornerShape(9.dp)).background(color.copy(alpha = 0.14f).compositeOver(surface))
+                    .clickable { open(sl.id) }.padding(vertical = 5.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("$n", color = color, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                Spacer(Modifier.width(3.dp))
+                Text(sl.title, color = color, fontSize = 11.sp, maxLines = 1)
+            }
+        }
+    }
+}
+
+// ===================================================================================== 6 · Fokus
+
+@Composable
+private fun FocusCard(state: HomeState, openList: (String) -> Unit, openTask: (String) -> Unit, toggle: (String) -> Unit) {
+    val head = Color(0xFF0C447C)
+    val surface = MaterialTheme.colorScheme.surface
+    val today = LocalDate.now().toEpochDay()
+    val names = state.lists.associate { it.id to it.name }
+    Surface(
+        shape = RoundedCornerShape(16.dp), color = SmartColors.myDay.copy(alpha = 0.10f).compositeOver(surface),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp)
+    ) {
+        Column(Modifier.padding(start = 12.dp, end = 8.dp, top = 10.dp, bottom = 8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("ALS NÄCHSTES", color = head, fontWeight = FontWeight.Bold, fontSize = 12.sp, letterSpacing = 0.5.sp,
+                    modifier = Modifier.weight(1f))
+                if (state.datedOpenCount > 0) Text(
+                    "alle ${state.datedOpenCount} ›", color = SmartColors.myDay, style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { openList(SmartList.PLANNED.id) }.padding(6.dp)
+                )
+            }
+            if (state.nextTasks.isEmpty()) Text(
+                "Nichts mit Fälligkeit – alles im grünen Bereich.", style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 8.dp)
+            )
+            state.nextTasks.forEach { t ->
+                val d = t.dueDate ?: today
+                val overdue = d < today
+                val col = if (overdue) SmartColors.overdue else SmartColors.myDay
+                val time = t.reminderAt?.let {
+                    java.time.Instant.ofEpochMilli(it).atZone(java.time.ZoneId.systemDefault()).toLocalTime()
+                        .format(DateTimeFormatter.ofPattern("HH:mm"))
+                }
+                val whenText = when {
+                    overdue -> "überfällig"
+                    d == today -> "heute" + (time?.let { " $it" } ?: "")
+                    else -> formatDue(d)
+                }
+                Row(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable { openTask(t.id) },
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    CheckCircle(t.done, col, 18.dp) { toggle(t.id) }
+                    Column(Modifier.weight(1f).padding(vertical = 4.dp)) {
+                        Text(t.title, style = MaterialTheme.typography.bodyMedium, maxLines = 1)
+                        Text(listOfNotNull(whenText, names[t.listId]).joinToString(" · "), color = col, fontSize = 11.sp, maxLines = 1)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FocusCounters(state: HomeState, open: (String) -> Unit) {
+    val bg = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
+    Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        listOf(SmartList.MY_DAY, SmartList.IMPORTANT, SmartList.PLANNED).forEach { sl ->
+            Row(
+                Modifier.weight(1f).clip(RoundedCornerShape(8.dp)).background(bg).clickable { open(sl.id) }.padding(vertical = 5.dp),
+                horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("${state.smartCounts[sl] ?: 0}", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = sl.color)
+                Spacer(Modifier.width(4.dp))
+                Text(sl.title, fontSize = 11.sp, maxLines = 1)
+            }
+        }
+    }
+}
+
+@Composable
+private fun SectionHead(title: String) {
+    Text(
+        title.uppercase(), fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.6.sp,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.fillMaxWidth().padding(top = 6.dp).background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
+            .padding(horizontal = 16.dp, vertical = 6.dp)
+    )
+}
+
+// ===================================================================================== 7 · Raster
+
+@Composable
+private fun GridSmartTiles(state: HomeState, open: (String) -> Unit) {
+    val surface = MaterialTheme.colorScheme.surface
+    val dueColor = if (state.overdueCount > 0) SmartColors.overdue else SmartColors.due
+    val tiles = listOf(
+        Triple(SmartList.MY_DAY, SmartColors.myDay, Icons.Outlined.WbSunny),
+        Triple(SmartList.IMPORTANT, SmartColors.important, Icons.Outlined.StarOutline),
+        Triple(SmartList.PLANNED, SmartColors.planned, Icons.Outlined.CalendarMonth),
+        Triple(SmartList.DUE, dueColor, Icons.Outlined.CalendarMonth),
+    )
+    Column(Modifier.padding(horizontal = 10.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        tiles.chunked(2).forEach { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                row.forEach { (sl, c, icon) ->
+                    Row(
+                        Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).background(c.copy(alpha = 0.14f).compositeOver(surface))
+                            .clickable { open(sl.id) }.padding(horizontal = 12.dp, vertical = 9.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(icon, null, tint = c, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(sl.title, color = c, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                        Text("${state.smartCounts[sl] ?: 0}", color = c, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(4.dp))
+    }
+}
+
+/** Shaded section head in the group colour + 2-column tiles (lists and subgroup folders). */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun GridSection(node: GroupNode, a: HomeActions) {
+    val g = node.group
+    val tint = node.tint()
+    val surface = MaterialTheme.colorScheme.surface
+    var menu by remember { mutableStateOf(false) }
+    val rot by animateFloatAsState(if (g.expanded) 90f else 0f, label = "gridsec")
+    Column(Modifier.animateContentSize().padding(bottom = 4.dp)) {
+        Box {
+            Row(
+                Modifier.fillMaxWidth().background(tint.copy(alpha = 0.16f).compositeOver(surface))
+                    .combinedClickable(onClick = { a.toggle(g) }, onLongClick = { menu = true })
+                    .padding(start = 12.dp, end = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Filled.ChevronRight, null, tint = tint.deep(), modifier = Modifier.size(18.dp).rotate(rot))
+                Spacer(Modifier.width(6.dp))
+                Text(g.name.uppercase(), color = tint.deep(), fontWeight = FontWeight.Bold, fontSize = 12.sp, letterSpacing = 0.6.sp,
+                    modifier = Modifier.weight(1f).padding(vertical = 9.dp))
+                Text("${node.open}", color = tint.deep(), fontSize = 12.sp)
+                IconButton(onClick = { menu = true }, modifier = Modifier.size(32.dp)) {
+                    Icon(Icons.Filled.MoreVert, "Gruppenmenü", tint = tint.deep(), modifier = Modifier.size(16.dp))
+                }
+            }
+            GroupMenu(g, menu, a) { menu = false }
+        }
+        if (g.expanded) {
+            val tiles: List<Any> = node.lists + node.subs
+            TileGrid(tiles) { item, m ->
+                when (item) {
+                    is ListWithCount -> ListTile(item, tint, a, m)
+                    is GroupNode -> FolderTile(item, item.tint(tint), a, m)
+                }
+            }
+            node.subs.filter { it.group.expanded && it.lists.isNotEmpty() }.forEach { sub ->
+                val st = sub.tint(tint)
+                Text(
+                    "${g.name} › ${sub.group.name}", color = st.deep(), fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.fillMaxWidth().background(st.copy(alpha = 0.08f).compositeOver(surface))
+                        .padding(horizontal = 16.dp, vertical = 5.dp)
+                )
+                TileGrid(sub.lists) { item, m -> ListTile(item as ListWithCount, st, a, m) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun GridLoose(lists: List<ListWithCount>, a: HomeActions) {
+    Column {
+        Text(
+            "OHNE GRUPPE", color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold, fontSize = 12.sp,
+            letterSpacing = 0.6.sp,
+            modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f))
+                .padding(horizontal = 16.dp, vertical = 9.dp)
+        )
+        TileGrid(lists) { item, m -> (item as ListWithCount).let { ListTile(it, listColor(it.color), a, m) } }
+    }
+}
+
+@Composable
+private fun TileGrid(items: List<Any>, tile: @Composable (Any, Modifier) -> Unit) {
+    Column(Modifier.padding(horizontal = 10.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        items.chunked(2).forEach { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                row.forEach { tile(it, Modifier.weight(1f)) }
+                if (row.size == 1) Spacer(Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun ListTile(l: ListWithCount, color: Color, a: HomeActions, modifier: Modifier) {
+    var menu by remember { mutableStateOf(false) }
+    Box(modifier) {
+        Row(
+            Modifier.fillMaxWidth().height(IntrinsicSize.Min).clip(RoundedCornerShape(topEnd = 10.dp, bottomEnd = 10.dp))
+                .background(MaterialTheme.colorScheme.surface)
+                .combinedClickable(onClick = { a.openList(l.id) }, onLongClick = { menu = true })
+        ) {
+            Box(Modifier.width(3.dp).fillMaxHeight().background(color))
+            Column(Modifier.weight(1f).padding(horizontal = 10.dp, vertical = 8.dp)) {
+                Text(l.name, style = MaterialTheme.typography.bodyMedium, maxLines = 1)
+                Text("${l.openCount}", color = color, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+            }
+        }
+        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+            DropdownMenuItem(text = { Text("In Gruppe verschieben") },
+                leadingIcon = { Icon(Icons.AutoMirrored.Outlined.DriveFileMove, null) },
+                onClick = { menu = false; a.moveList(l) })
+            DropdownMenuItem(text = { Text("Anordnen …") }, leadingIcon = { Icon(Icons.Outlined.SwapVert, null) },
+                onClick = { menu = false; a.arrange() })
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun FolderTile(node: GroupNode, color: Color, a: HomeActions, modifier: Modifier) {
+    var menu by remember { mutableStateOf(false) }
+    Box(modifier) {
+        Row(
+            Modifier.fillMaxWidth().height(IntrinsicSize.Min).clip(RoundedCornerShape(topEnd = 10.dp, bottomEnd = 10.dp))
+                .background(color.copy(alpha = 0.10f).compositeOver(MaterialTheme.colorScheme.surface))
+                .combinedClickable(onClick = { a.toggle(node.group) }, onLongClick = { menu = true })
+        ) {
+            Box(Modifier.width(3.dp).fillMaxHeight().background(color))
+            Column(Modifier.weight(1f).padding(horizontal = 10.dp, vertical = 8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(if (node.group.expanded) Icons.Outlined.FolderOpen else Icons.Outlined.Folder, null,
+                        tint = color, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text(node.group.name, style = MaterialTheme.typography.bodyMedium, maxLines = 1)
+                }
+                Text("${node.open}", color = color, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+            }
+        }
+        GroupMenu(node.group, menu, a) { menu = false }
     }
 }
 

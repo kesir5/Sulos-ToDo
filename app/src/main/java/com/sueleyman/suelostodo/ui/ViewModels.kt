@@ -30,12 +30,15 @@ private fun <T> Flow<T>.state(vm: ViewModel, initial: T): StateFlow<T> =
 enum class SmartList(val id: String, val title: String, val color: Color) {
     MY_DAY("smart:myday", "Mein Tag", SmartColors.myDay),
     IMPORTANT("smart:important", "Wichtig", SmartColors.important),
-    PLANNED("smart:planned", "Geplant", SmartColors.planned);
+    PLANNED("smart:planned", "Geplant", SmartColors.planned),
+    /** Open tasks due today or overdue. */
+    DUE("smart:due", "Fällig", SmartColors.due);
 
     fun matches(t: Task): Boolean = when (this) {
         MY_DAY -> t.myDay == LocalDate.now().toEpochDay()
         IMPORTANT -> t.important
         PLANNED -> t.dueDate != null
+        DUE -> !t.done && t.dueDate != null && t.dueDate <= LocalDate.now().toEpochDay()
     }
 
     companion object {
@@ -75,6 +78,10 @@ data class HomeState(
     val myDayDone: Int = 0,
     val myDayTotal: Int = 0,
     val todayCount: Int = 0,
+    val overdueCount: Int = 0,
+    /** Up to 3 most urgent open tasks (by due date) for the "Fokus" layout. */
+    val nextTasks: List<Task> = emptyList(),
+    val datedOpenCount: Int = 0,
 )
 
 /** Same structure as [buildHomeRows] but nested, with progress per group (root tasks). */
@@ -142,6 +149,11 @@ class HomeViewModel : ViewModel() {
             smartCounts = SmartList.entries.associateWith { s -> open.count { s.matches(it) } },
             myDayDone = myDay.count { it.done }, myDayTotal = myDay.size,
             todayCount = open.count { it.myDay == today || it.dueDate == today },
+            overdueCount = open.count { it.dueDate != null && it.dueDate < today },
+            nextTasks = open.filter { it.dueDate != null }
+                .sortedWith(compareBy<Task>({ it.dueDate }, { it.reminderAt ?: Long.MAX_VALUE }, { it.sortOrder }))
+                .take(3),
+            datedOpenCount = open.count { it.dueDate != null },
         )
     }.state(this, HomeState())
 
@@ -151,6 +163,7 @@ class HomeViewModel : ViewModel() {
     fun createGroup(name: String, parentId: String?) = viewModelScope.launch { repo.createGroup(name, parentId) }
     fun renameGroup(id: String, name: String) = viewModelScope.launch { repo.renameGroup(id, name) }
     fun dissolveGroup(id: String) = viewModelScope.launch { repo.dissolveGroup(id) }
+    fun toggleDone(taskId: String) = viewModelScope.launch { repo.toggleDone(taskId) }
     fun setGroupColor(id: String, color: Long?) = viewModelScope.launch { repo.setGroupColor(id, color) }
     fun toggleGroupId(id: String) = viewModelScope.launch {
         state.value.groups.firstOrNull { it.id == id }?.let { repo.setGroupExpanded(it.id, !it.expanded) }
@@ -201,7 +214,7 @@ class ListViewModel(val listId: String) : ViewModel() {
         val names = lists.associate { it.id to it.name }
         if (smart != null) {
             val matching = all.filter { smart.matches(it) && it.listId in names }
-            val sorted = if (smart == SmartList.PLANNED) matching.sortedBy { it.dueDate } else matching
+            val sorted = if (smart == SmartList.PLANNED || smart == SmartList.DUE) matching.sortedBy { it.dueDate } else matching
             ListUiState(
                 header = h,
                 openRows = sorted.filter { !it.done }.map { TreeRow(it, false, 0, 0) },
@@ -230,7 +243,7 @@ class ListViewModel(val listId: String) : ViewModel() {
             title = title,
             important = smart == SmartList.IMPORTANT,
             myDay = smart == SmartList.MY_DAY,
-            dueToday = smart == SmartList.PLANNED,
+            dueToday = smart == SmartList.PLANNED || smart == SmartList.DUE,
         )
     }
 

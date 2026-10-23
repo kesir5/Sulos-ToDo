@@ -65,7 +65,8 @@ class MainActivity : ComponentActivity() {
                         HomeScreen(
                             onOpenList = { nav.navigate("list/$it") },
                             onSettings = { nav.navigate("settings") },
-                            onArrange = { nav.navigate("arrange") }
+                            onArrange = { nav.navigate("arrange") },
+                            onOpenTask = { nav.navigate("task/$it") }
                         )
                     }
                     composable(

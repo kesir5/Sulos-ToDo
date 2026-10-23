@@ -16,6 +16,8 @@ object SmartColors {
     val myDay = Color(0xFF3B6EA5)
     val important = Color(0xFFC4314B)
     val planned = Color(0xFF038387)
+    val due = Color(0xFFCA5010)
+    val overdue = Color(0xFFC4314B)
 }
 
 @Composable
