@@ -45,6 +45,7 @@ import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.StarOutline
+import androidx.compose.material.icons.outlined.SwapVert
 import androidx.compose.material.icons.outlined.WbSunny
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -92,6 +93,7 @@ import java.util.Locale
 
 /** Callbacks for group headers and list rows. */
 private class HomeActions(
+    val arrange: () -> Unit,
     val openList: (String) -> Unit,
     val toggle: (ListGroup) -> Unit,
     val rename: (ListGroup) -> Unit,
@@ -103,7 +105,7 @@ private class HomeActions(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(onOpenList: (String) -> Unit, onSettings: () -> Unit) {
+fun HomeScreen(onOpenList: (String) -> Unit, onSettings: () -> Unit, onArrange: () -> Unit = {}) {
     val vm: HomeViewModel = viewModel { HomeViewModel() }
     val state by vm.state.collectAsStateWithLifecycle()
     val style by UiPrefs.homeStyle.collectAsState()
@@ -114,8 +116,10 @@ fun HomeScreen(onOpenList: (String) -> Unit, onSettings: () -> Unit) {
     var renameGroup by remember { mutableStateOf<ListGroup?>(null) }
     var dissolve by remember { mutableStateOf<ListGroup?>(null) }
     var moveList by remember { mutableStateOf<ListWithCount?>(null) }
+    var newGroupFor by remember { mutableStateOf<ListWithCount?>(null) }
 
     val actions = HomeActions(
+        arrange = onArrange,
         openList = onOpenList,
         toggle = { vm.toggleGroup(it) },
         rename = { renameGroup = it },
@@ -129,10 +133,13 @@ fun HomeScreen(onOpenList: (String) -> Unit, onSettings: () -> Unit) {
         containerColor = if (style == HomeStyle.TILES || style == HomeStyle.DASHBOARD)
             MaterialTheme.colorScheme.background else MaterialTheme.colorScheme.surface,
         topBar = {
-            if (style == HomeStyle.GREETING) GreetingHeader(state, userName, onSettings)
+            if (style == HomeStyle.GREETING) GreetingHeader(state, userName, onSettings, onArrange)
             else TopAppBar(
                 title = { Text("Sülos ToDo", fontWeight = FontWeight.SemiBold) },
-                actions = { IconButton(onClick = onSettings) { Icon(Icons.Outlined.Settings, "Einstellungen") } }
+                actions = {
+                    IconButton(onClick = onArrange) { Icon(Icons.Outlined.SwapVert, "Listen anordnen") }
+                    IconButton(onClick = onSettings) { Icon(Icons.Outlined.Settings, "Einstellungen") }
+                }
             )
         },
         bottomBar = {
@@ -221,7 +228,15 @@ fun HomeScreen(onOpenList: (String) -> Unit, onSettings: () -> Unit) {
         GroupPickDialog(
             title = "\"${l.name}\" verschieben", groups = state.groups, current = l.groupId,
             onDismiss = { moveList = null },
-            onPick = { moveList = null; vm.moveList(l.id, it) }
+            onPick = { moveList = null; vm.moveList(l.id, it) },
+            onNewGroup = { moveList = null; newGroupFor = l }
+        )
+    }
+    newGroupFor?.let { l ->
+        NewGroupDialog(
+            groups = state.groups, presetParent = null,
+            onDismiss = { newGroupFor = null },
+            onCreate = { name, p -> newGroupFor = null; vm.createGroupAndMove(name, p, l.id) }
         )
     }
 }
@@ -276,7 +291,7 @@ private fun SmartTiles(state: HomeState, open: (String) -> Unit) {
 }
 
 @Composable
-private fun GreetingHeader(state: HomeState, name: String, onSettings: () -> Unit) {
+private fun GreetingHeader(state: HomeState, name: String, onSettings: () -> Unit, onArrange: () -> Unit) {
     val hour = LocalTime.now().hour
     val hello = when { hour < 11 -> "Guten Morgen"; hour < 18 -> "Guten Tag"; else -> "Guten Abend" }
     Column(
@@ -288,6 +303,7 @@ private fun GreetingHeader(state: HomeState, name: String, onSettings: () -> Uni
                 LocalDate.now().format(DateTimeFormatter.ofPattern("EEEE, d. MMMM", Locale.GERMAN)),
                 color = Color.White.copy(alpha = 0.8f), style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f)
             )
+            IconButton(onClick = onArrange) { Icon(Icons.Outlined.SwapVert, "Listen anordnen", tint = Color.White) }
             IconButton(onClick = onSettings) { Icon(Icons.Outlined.Settings, "Einstellungen", tint = Color.White) }
         }
         Text(
@@ -388,11 +404,11 @@ private fun GroupBlock(node: GroupNode, style: HomeStyle, a: HomeActions) {
     Column(Modifier.animateContentSize()) {
         GroupHeader(node, style, a)
         if (node.group.expanded) {
+            node.lists.forEach { ListNavRow(it, 1, style, node.color, a) }
             node.subs.forEach { sub ->
                 GroupHeader(sub, style, a, parentColor = node.color)
                 if (sub.group.expanded) sub.lists.forEach { ListNavRow(it, 2, style, node.color, a) }
             }
-            node.lists.forEach { ListNavRow(it, 1, style, node.color, a) }
         }
     }
 }
@@ -545,6 +561,7 @@ private fun GroupCard(node: GroupNode, a: HomeActions) {
                 GroupMenu(g, menu, a) { menu = false }
             }
             if (g.expanded) {
+                node.lists.forEach { ListNavRow(it, 0, HomeStyle.TILES, null, a) }
                 node.subs.forEach { sub -> key(sub.group.id) {
                     var subMenu by remember { mutableStateOf(false) }
                     Box {
@@ -562,7 +579,6 @@ private fun GroupCard(node: GroupNode, a: HomeActions) {
                     }
                     if (sub.group.expanded) sub.lists.forEach { ListNavRow(it, 1, HomeStyle.TILES, null, a) }
                 } }
-                node.lists.forEach { ListNavRow(it, 0, HomeStyle.TILES, null, a) }
                 if (node.lists.isEmpty() && node.subs.isEmpty()) Text(
                     "Leer – über ⋮ eine Liste hinzufügen", color = muted, style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.padding(14.dp)
@@ -582,6 +598,8 @@ private fun GroupMenu(g: ListGroup, expanded: Boolean, a: HomeActions, onDismiss
         if (g.parentId == null) DropdownMenuItem(
             text = { Text("Untergruppe anlegen") }, leadingIcon = { Icon(Icons.Outlined.CreateNewFolder, null) },
             onClick = { onDismiss(); a.addSub(g) })
+        DropdownMenuItem(text = { Text("Anordnen …") }, leadingIcon = { Icon(Icons.Outlined.SwapVert, null) },
+            onClick = { onDismiss(); a.arrange() })
         DropdownMenuItem(text = { Text("Gruppe auflösen") }, leadingIcon = { Icon(Icons.Outlined.FolderOff, null) },
             onClick = { onDismiss(); a.dissolve(g) })
     }
@@ -620,6 +638,9 @@ private fun ListNavRow(l: ListWithCount, depth: Int, style: HomeStyle, groupColo
             DropdownMenuItem(text = { Text("In Gruppe verschieben") },
                 leadingIcon = { Icon(Icons.AutoMirrored.Outlined.DriveFileMove, null) },
                 onClick = { menu = false; a.moveList(l) })
+            DropdownMenuItem(text = { Text("Anordnen …") },
+                leadingIcon = { Icon(Icons.Outlined.SwapVert, null) },
+                onClick = { menu = false; a.arrange() })
         }
     }
 }

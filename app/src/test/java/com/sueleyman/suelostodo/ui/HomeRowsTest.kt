@@ -28,7 +28,7 @@ class HomeRowsTest {
         }
         assertEquals(
             listOf(
-                "G0:ach:13", "G1:sport:4", "L2:marathon", "G1:y26:2", "L1:bucket",
+                "G0:ach:13", "L1:bucket", "G1:sport:4", "L2:marathon", "G1:y26:2",
                 "G0:work:5", "L0:loose", "L0:orphan"
             ), flat
         )

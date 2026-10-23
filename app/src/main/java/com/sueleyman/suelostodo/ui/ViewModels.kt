@@ -116,11 +116,12 @@ fun buildHomeRows(lists: List<ListWithCount>, groups: List<ListGroup>): List<Hom
     for (top in tops) {
         out += HomeRow.GroupRow(top, 0, count(top))
         if (!top.expanded) continue
+        // direct lists first, then subgroups (same order as the arrange screen)
+        listsOf[top.id].orEmpty().forEach { out += HomeRow.ListRow(it, 1) }
         for (sub in subsOf[top.id].orEmpty()) {
             out += HomeRow.GroupRow(sub, 1, count(sub))
             if (sub.expanded) listsOf[sub.id].orEmpty().forEach { out += HomeRow.ListRow(it, 2) }
         }
-        listsOf[top.id].orEmpty().forEach { out += HomeRow.ListRow(it, 1) }
     }
     userLists.filter { it.groupId == null || it.groupId !in gIds }.forEach { out += HomeRow.ListRow(it, 0) }
     return out
@@ -155,6 +156,9 @@ class HomeViewModel : ViewModel() {
     }
     fun toggleGroup(g: ListGroup) = viewModelScope.launch { repo.setGroupExpanded(g.id, !g.expanded) }
     fun moveList(listId: String, groupId: String?) = viewModelScope.launch { repo.moveListToGroup(listId, groupId) }
+    fun createGroupAndMove(name: String, parentId: String?, listId: String) = viewModelScope.launch {
+        repo.createGroup(name, parentId)?.let { repo.moveListToGroup(listId, it) }
+    }
 }
 
 // ------------------------------------------------------------------ List
@@ -240,6 +244,9 @@ class ListViewModel(val listId: String) : ViewModel() {
     val groups = repo.observeGroups()
     val groupId = repo.observeList(listId).map { it?.groupId }
     fun moveToGroup(groupId: String?) = viewModelScope.launch { repo.moveListToGroup(listId, groupId) }
+    fun createGroupAndMove(name: String, parentId: String?) = viewModelScope.launch {
+        repo.createGroup(name, parentId)?.let { repo.moveListToGroup(listId, it) }
+    }
 }
 
 // ------------------------------------------------------------------ Detail

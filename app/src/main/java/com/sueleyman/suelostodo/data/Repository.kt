@@ -117,6 +117,21 @@ class Repository(
         return l.id
     }
 
+    /** Persists a manual arrangement (order and parents of groups and lists). Only changed rows are written. */
+    suspend fun applyArrangement(a: com.sueleyman.suelostodo.ui.Arrangement) {
+        val gMap = dao.allGroupsRaw().associateBy { it.id }
+        for (p in a.groups) gMap[p.id]?.let {
+            if (it.parentId != p.parentId || it.sortOrder != p.sortOrder)
+                dao.upsertGroup(it.copy(parentId = p.parentId, sortOrder = p.sortOrder, updatedAt = now()))
+        }
+        val lMap = dao.allListsRaw().associateBy { it.id }
+        for (p in a.lists) lMap[p.id]?.let {
+            if (it.groupId != p.parentId || it.sortOrder != p.sortOrder)
+                dao.upsertList(it.copy(groupId = p.parentId, sortOrder = p.sortOrder, updatedAt = now()))
+        }
+        changed()
+    }
+
     // ---------- tasks ----------
     /**
      * Adds a task. For smart lists the [listId] must be a real list; flags such as

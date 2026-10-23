@@ -166,6 +166,7 @@ fun ListScreen(
     var renameDialog by remember { mutableStateOf(false) }
     var deleteDialog by remember { mutableStateOf(false) }
     var groupDialog by remember { mutableStateOf(false) }
+    var newGroupDialog by remember { mutableStateOf(false) }
     val groups by vm.groups.collectAsStateWithLifecycle(initialValue = emptyList())
     val currentGroup by vm.groupId.collectAsStateWithLifecycle(initialValue = null)
     var subtaskFor by remember { mutableStateOf<String?>(null) }
@@ -283,7 +284,15 @@ fun ListScreen(
         GroupPickDialog(
             title = "\"${h?.title}\" verschieben", groups = groups, current = currentGroup,
             onDismiss = { groupDialog = false },
-            onPick = { groupDialog = false; vm.moveToGroup(it) }
+            onPick = { groupDialog = false; vm.moveToGroup(it) },
+            onNewGroup = { groupDialog = false; newGroupDialog = true }
+        )
+    }
+    if (newGroupDialog) {
+        NewGroupDialog(
+            groups = groups, presetParent = null,
+            onDismiss = { newGroupDialog = false },
+            onCreate = { name, p -> newGroupDialog = false; vm.createGroupAndMove(name, p) }
         )
     }
     if (deleteDialog) {

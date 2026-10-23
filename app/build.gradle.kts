@@ -95,6 +95,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
     implementation("io.coil-kt:coil-compose:2.7.0")
     implementation("androidx.browser:browser:1.8.0")
+    implementation("sh.calvin.reorderable:reorderable:2.4.3")
 
     testImplementation("junit:junit:4.13.2")
 }

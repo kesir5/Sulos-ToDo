@@ -10,6 +10,7 @@ und optionaler Google-Drive-Synchronisation.
 - Listen mit Farbthema, Smart-Listen *Mein Tag*, *Wichtig*, *Geplant*
 - Aufgabenbaum: Aufgaben mit Unteraufgaben haben ein Plus-/Minus-Icon zum Auf- und Zuklappen; Tipp auf die linke Hälfte einer Aufgabe klappt ebenfalls, Tipp auf die rechte Hälfte öffnet die Details; dazu „Alle auf-/zuklappen“ in der Kopfzeile
 - Listengruppen (Ordner) über zwei Ebenen, z. B. Achievements → Sport → Marathon; auf-/zuklappbar, Listen per langem Druck verschieben
+- Listen und Gruppen per Drag & Drop anordnen (Startseite → Symbol ⇅ „Listen anordnen“)
 - Fünf Designs für die Startseite (Einstellungen → Design der Startseite): Schattierte Bänder · Kacheln und Karten · Farbakzent · Begrüßungskopf · Dashboard
 - Sechs Designs für die Aufgabenübersicht, umschaltbar unter Einstellungen → Design:
   A Klassisch · B Baum kompakt · C Gruppenkarten · D Outliner · E Ebenen-Streifen · F Fortschrittsring

@@ -13,6 +13,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.material.icons.outlined.CreateNewFolder
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -64,16 +67,28 @@ fun GroupPickDialog(
     current: String?,
     onDismiss: () -> Unit,
     onPick: (String?) -> Unit,
+    onNewGroup: (() -> Unit)? = null,
 ) {
     var sel by remember { mutableStateOf(current) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {
-            LazyColumn(Modifier.heightIn(max = 400.dp)) {
-                item { PickRow(sel == null, "Keine Gruppe", 0, false) { sel = null } }
-                items(orderedGroups(groups), key = { it.first.id }) { (g, d) ->
-                    PickRow(sel == g.id, g.name, d, true) { sel = g.id }
+            Column(Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState())) {
+                PickRow(sel == null, "Keine Gruppe", 0, false) { sel = null }
+                orderedGroups(groups).forEach { (g, d) -> PickRow(sel == g.id, g.name, d, true) { sel = g.id } }
+                if (groups.isEmpty()) Text(
+                    "Du hast noch keine Gruppen. Lege zuerst eine an – über „Gruppe“ unten auf der Startseite oder hier.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp, start = 12.dp, end = 12.dp)
+                )
+                if (onNewGroup != null) Row(
+                    Modifier.fillMaxWidth().clickable(onClick = onNewGroup).padding(horizontal = 12.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Outlined.CreateNewFolder, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(10.dp))
+                    Text("Neue Gruppe anlegen …", color = MaterialTheme.colorScheme.primary)
                 }
             }
         },

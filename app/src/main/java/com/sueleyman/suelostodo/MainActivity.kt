@@ -18,6 +18,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.sueleyman.suelostodo.sync.SyncScheduler
 import com.sueleyman.suelostodo.ui.HomeScreen
+import com.sueleyman.suelostodo.ui.ArrangeScreen
 import com.sueleyman.suelostodo.ui.ListScreen
 import com.sueleyman.suelostodo.ui.SettingsScreen
 import com.sueleyman.suelostodo.ui.TaskDetailScreen
@@ -63,7 +64,8 @@ class MainActivity : ComponentActivity() {
                     composable("home") {
                         HomeScreen(
                             onOpenList = { nav.navigate("list/$it") },
-                            onSettings = { nav.navigate("settings") }
+                            onSettings = { nav.navigate("settings") },
+                            onArrange = { nav.navigate("arrange") }
                         )
                     }
                     composable(
@@ -94,6 +96,7 @@ class MainActivity : ComponentActivity() {
                             onOpenTask = { nav.navigate("task/$it") }
                         )
                     }
+                    composable("arrange") { ArrangeScreen(onBack = { nav.popBackStack() }) }
                     composable("settings") {
                         SettingsScreen(onBack = { nav.popBackStack() }, onTransfer = { nav.navigate("transfer") })
                     }
