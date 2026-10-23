@@ -44,14 +44,10 @@
 
         <activity
             android:name=".widget.WidgetConfigActivity"
-            android:exported="true"
+            android:exported="false"
             android:excludeFromRecents="true"
             android:taskAffinity=""
-            android:label="Widget einrichten">
-            <intent-filter>
-                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
-            </intent-filter>
-        </activity>
+            android:label="Widget einrichten" />
 
         <receiver
             android:name=".widget.TaskWidgetReceiver"

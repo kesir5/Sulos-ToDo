@@ -152,8 +152,14 @@ fun HomeScreen(
             MaterialTheme.colorScheme.background else MaterialTheme.colorScheme.surface,
         topBar = {
             val allOpen = state.groups.isNotEmpty() && state.groups.all { it.expanded }
-            val foldAll: (@Composable (Color) -> Unit)? = if (state.groups.isEmpty()) null else { tint ->
-                IconButton(onClick = { vm.toggleAllGroups() }) {
+            val ctx = androidx.compose.ui.platform.LocalContext.current
+            // always visible next to the settings icon (also when there are no groups yet)
+            val foldAll: (@Composable (Color) -> Unit)? = { tint ->
+                IconButton(onClick = {
+                    if (state.groups.isEmpty()) android.widget.Toast.makeText(
+                        ctx, "Noch keine Gruppen – lege unten über „Gruppe“ eine an.", android.widget.Toast.LENGTH_SHORT
+                    ).show() else vm.toggleAllGroups()
+                }) {
                     Icon(
                         if (allOpen) Icons.Outlined.UnfoldLess else Icons.Outlined.UnfoldMore,
                         if (allOpen) "Alle Gruppen einklappen" else "Alle Gruppen ausklappen", tint = tint
