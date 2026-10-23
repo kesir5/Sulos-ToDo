@@ -163,10 +163,14 @@ class Repository(
         val parent = parentId?.let { dao.getTask(it) }
         val depth = if (parent == null) 0 else parent.depth + 1
         if (depth > MAX_DEPTH) return null
+        // new entries go to the TOP of their level (list or parent task)
+        val targetList = parent?.listId ?: listId
+        val minOrder = dao.getTasksOfList(targetList).filter { it.parentId == parent?.id }.minOfOrNull { it.sortOrder }
         val t = Task(
-            listId = parent?.listId ?: listId,
+            listId = targetList,
             parentId = parent?.id,
             depth = depth,
+            sortOrder = (minOrder ?: System.currentTimeMillis()) - 1000L,
             title = title.trim(),
             important = important,
             myDay = if (myDay) LocalDate.now().toEpochDay() else null,

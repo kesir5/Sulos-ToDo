@@ -325,7 +325,7 @@ class WidgetFactory(private val c: Context, private val widgetId: Int) : RemoteV
             is WItem.Section -> RemoteViews(c.packageName, R.layout.widget_item_section).apply {
                 setTextViewText(R.id.s_title, it.title)
                 setTextColor(R.id.s_title, if (dark) DIM else deep(it.color))
-                setTextViewTextSize(R.id.s_title, android.util.TypedValue.COMPLEX_UNIT_SP, 10.5f * fs)
+                setTextViewTextSize(R.id.s_title, android.util.TypedValue.COMPLEX_UNIT_SP, 13.65f * fs /* category heading: +30 % */)
                 // tap on a list name opens this list in the app
                 it.listId?.let { lid ->
                     setTextViewText(R.id.s_title, it.title + "  ›")

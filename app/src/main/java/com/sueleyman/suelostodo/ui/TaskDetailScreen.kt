@@ -58,6 +58,8 @@ import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.NotificationsNone
 import androidx.compose.material.icons.outlined.StarOutline
 import androidx.compose.material.icons.outlined.WbSunny
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.animation.animateContentSize
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
@@ -89,6 +91,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -224,6 +228,8 @@ fun TaskDetailScreen(taskId: String, onBack: () -> Unit, onOpenTask: (String) ->
         DetailStyle.HERO -> HeroDetail(ctx)
         DetailStyle.TILES -> TilesDetail(ctx)
         DetailStyle.DOCUMENT -> DocumentDetail(ctx)
+        DetailStyle.ACTIONBAR -> ActionBarDetail(ctx)
+        DetailStyle.SHEET -> SheetDetail(ctx)
     }
 
     // ---------- dialogs ----------
@@ -358,14 +364,14 @@ private fun HeroDetail(c: DetailCtx) {
                     AddSubtaskField(c, Modifier.padding(top = 4.dp))
                 }
                 HeroCard {
-                    Text("Anhänge", style = MaterialTheme.typography.titleSmall)
-                    Spacer(Modifier.height(8.dp))
-                    AttachmentGrid(c)
-                }
-                HeroCard {
                     Text("Notiz", style = MaterialTheme.typography.titleSmall)
                     Spacer(Modifier.height(4.dp))
                     NoteField(c, Modifier.heightIn(min = 80.dp))
+                }
+                HeroCard {
+                    Text("Anhänge", style = MaterialTheme.typography.titleSmall)
+                    Spacer(Modifier.height(8.dp))
+                    AttachmentGrid(c)
                 }
             }
         }
@@ -459,8 +465,6 @@ private fun TilesDetail(c: DetailCtx) {
                     AddSubtaskField(c, Modifier.padding(top = 4.dp))
                 }
             }
-            Text("Anhänge", style = MaterialTheme.typography.titleSmall)
-            AttachmentStrip(c)
             Surface(
                 shape = RoundedCornerShape(14.dp),
                 color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.6f),
@@ -472,6 +476,8 @@ private fun TilesDetail(c: DetailCtx) {
                     NoteField(c, Modifier.weight(1f).heightIn(min = 72.dp), MaterialTheme.colorScheme.onTertiaryContainer)
                 }
             }
+            Text("Anhänge", style = MaterialTheme.typography.titleSmall)
+            AttachmentStrip(c)
             CreatedText(c)
             Spacer(Modifier.height(24.dp).navigationBarsPadding())
         }
@@ -562,6 +568,14 @@ private fun DocumentDetail(c: DetailCtx) {
             }
             PropRow(Icons.Outlined.NotificationsNone, "Erinnerung", onClick = c.pickReminder) { PropValue(c.reminderLabel) }
             PropRow(Icons.Outlined.WbSunny, "Mein Tag", onClick = { c.vm.toggleMyDay() }) { PropValue(if (c.inMyDay) "Heute" else null) }
+            HorizontalDivider(Modifier.padding(vertical = 14.dp), color = MaterialTheme.colorScheme.outlineVariant)
+            Text("Unteraufgaben", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(4.dp))
+            SubtaskTree(c, guide = true)
+            AddSubtaskField(c, Modifier.padding(top = 2.dp))
+            HorizontalDivider(Modifier.padding(vertical = 14.dp), color = MaterialTheme.colorScheme.outlineVariant)
+            NoteField(c, Modifier.fillMaxWidth().heightIn(min = 160.dp), placeholder = "Notiz schreiben …", big = true)
+            HorizontalDivider(Modifier.padding(vertical = 14.dp), color = MaterialTheme.colorScheme.outlineVariant)
             PropRow(Icons.Outlined.AttachFile, "Anhänge") {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     c.state.attachments.forEach { a -> AttachmentChip(c, a) }
@@ -571,13 +585,6 @@ private fun DocumentDetail(c: DetailCtx) {
                     }
                 }
             }
-            HorizontalDivider(Modifier.padding(vertical = 14.dp), color = MaterialTheme.colorScheme.outlineVariant)
-            Text("Unteraufgaben", style = MaterialTheme.typography.titleMedium)
-            Spacer(Modifier.height(4.dp))
-            SubtaskTree(c, guide = true)
-            AddSubtaskField(c, Modifier.padding(top = 2.dp))
-            HorizontalDivider(Modifier.padding(vertical = 14.dp), color = MaterialTheme.colorScheme.outlineVariant)
-            NoteField(c, Modifier.fillMaxWidth().heightIn(min = 160.dp), placeholder = "Notiz schreiben …", big = true)
             CreatedText(c)
             Spacer(Modifier.height(24.dp).navigationBarsPadding())
         }
@@ -864,3 +871,221 @@ private fun AttachmentChip(c: DetailCtx, a: Attachment) {
     }
 }
 
+
+
+// =====================================================================================
+// 4 · ACTION BAR  –  sections clearly separated by lines
+// =====================================================================================
+
+@Composable
+private fun SectionTitle(text: String, accent: Color, meta: String? = null) {
+    Row(Modifier.fillMaxWidth().padding(bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(text.uppercase(), color = accent.deepen(), fontWeight = FontWeight.Bold, fontSize = 12.sp, letterSpacing = 0.6.sp,
+            modifier = Modifier.weight(1f))
+        meta?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+    }
+}
+
+/** Clearly visible line between the sections (full width). */
+@Composable
+private fun SectionLine() {
+    HorizontalDivider(Modifier.padding(vertical = 14.dp), thickness = 1.5.dp, color = MaterialTheme.colorScheme.outline.copy(alpha = 0.45f))
+}
+
+private fun Color.deepen() = Color(red = red * 0.75f, green = green * 0.75f, blue = blue * 0.75f, alpha = alpha)
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ActionBarDetail(c: DetailCtx) {
+    val t = c.task
+    val surface = MaterialTheme.colorScheme.surface
+    val line = MaterialTheme.colorScheme.outlineVariant
+    Scaffold(
+        containerColor = surface,
+        topBar = {
+            TopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
+                title = { Breadcrumb(c, c.accent) },
+                navigationIcon = { IconButton(onClick = c.onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Zurück") } },
+                actions = { DetailActions(c, withDelete = true) }
+            )
+        }
+    ) { pad ->
+        Column(
+            Modifier.fillMaxSize().padding(pad).imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 14.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                CheckCircle(t.done, c.accent, 24.dp) { c.vm.toggleDone() }
+                TitleField(c, MaterialTheme.typography.headlineSmall.copy(color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.SemiBold), Modifier.weight(1f))
+            }
+            Spacer(Modifier.height(8.dp))
+            // ---- segmented action bar
+            Row(
+                Modifier.fillMaxWidth().height(androidx.compose.foundation.layout.IntrinsicSize.Min)
+                    .clip(RoundedCornerShape(10.dp)).border(1.dp, line, RoundedCornerShape(10.dp))
+            ) {
+                @Composable
+                fun Seg(icon: ImageVector, label: String, active: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+                    Column(
+                        modifier.fillMaxHeight()
+                            .background(if (active) c.accent.copy(alpha = 0.14f).compositeOver(surface) else surface)
+                            .clickable(onClick = onClick).padding(vertical = 8.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(icon, null, tint = if (active) c.accent else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+                        Text(label, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            color = if (active) c.accent.deepen() else MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+                @Composable
+                fun Sep() = Box(Modifier.width(1.dp).fillMaxHeight().background(line))
+                Seg(Icons.Outlined.WbSunny, if (c.inMyDay) "Heute" else "Mein Tag", c.inMyDay, Modifier.weight(1f)) { c.vm.toggleMyDay() }
+                Sep()
+                Seg(Icons.Outlined.CalendarToday, c.dueLabel ?: "Fällig", c.dueLabel != null, Modifier.weight(1f), c.pickDue)
+                Sep()
+                Seg(Icons.Outlined.NotificationsNone, c.reminderLabel?.substringBefore(',') ?: "Erinnern", c.reminderLabel != null, Modifier.weight(1f), c.pickReminder)
+                Sep()
+                Seg(if (t.important) Icons.Filled.Star else Icons.Outlined.StarOutline, "Wichtig", t.important, Modifier.weight(1f)) { c.vm.toggleImportant() }
+                Sep()
+                AddAttachmentButton(c, Modifier.weight(1f)) { open ->
+                    Seg(Icons.Outlined.AttachFile, "Anhang", c.state.attachments.isNotEmpty(), Modifier.fillMaxWidth(), open)
+                }
+            }
+            SectionLine()
+            // ---- subtasks
+            SectionTitle("Unteraufgaben", c.accent,
+                if (c.state.children.isEmpty()) null else "${c.state.doneChildren}/${c.state.children.size}")
+            SubtaskTree(c, guide = true)
+            AddSubtaskField(c, Modifier.padding(top = 2.dp))
+            SectionLine()
+            // ---- note
+            SectionTitle("Notiz", c.accent)
+            Surface(shape = RoundedCornerShape(10.dp), color = Color(0xFFFFF8E5), modifier = Modifier.fillMaxWidth()) {
+                NoteField(c, Modifier.padding(12.dp).heightIn(min = 72.dp), Color(0xFF5C4400))
+            }
+            SectionLine()
+            // ---- attachments
+            SectionTitle("Anhänge", c.accent, c.state.attachments.size.takeIf { it > 0 }?.toString())
+            AttachmentStrip(c)
+            SectionLine()
+            CreatedText(c)
+            Spacer(Modifier.height(24.dp).navigationBarsPadding())
+        }
+    }
+}
+
+// =====================================================================================
+// 5 · SHEET with collapsible sections
+// =====================================================================================
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SheetDetail(c: DetailCtx) {
+    val t = c.task
+    var openSub by rememberSaveable { mutableStateOf(true) }
+    var openNote by rememberSaveable { mutableStateOf(true) }
+    var openAtt by rememberSaveable { mutableStateOf(c.state.attachments.isNotEmpty()) }
+    var openDates by rememberSaveable { mutableStateOf(false) }
+    Scaffold(
+        containerColor = c.accent,
+        topBar = {
+            TopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color.Transparent, navigationIconContentColor = Color.White, actionIconContentColor = Color.White
+                ),
+                title = {},
+                navigationIcon = { IconButton(onClick = c.onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Zurück") } },
+                actions = {
+                    IconButton(onClick = { c.vm.toggleImportant() }) {
+                        Icon(if (t.important) Icons.Filled.Star else Icons.Outlined.StarOutline, "Wichtig", tint = Color.White)
+                    }
+                    DetailActions(c, withDelete = true)
+                }
+            )
+        }
+    ) { pad ->
+        Column(Modifier.fillMaxSize().padding(pad).imePadding()) {
+            // ---- coloured head
+            Column(Modifier.padding(start = 12.dp, end = 12.dp, bottom = 22.dp)) {
+                Breadcrumb(c, Color.White.copy(alpha = 0.85f))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CheckCircle(t.done, Color.White, 24.dp) { c.vm.toggleDone() }
+                    TitleField(c, MaterialTheme.typography.headlineSmall.copy(color = Color.White, fontWeight = FontWeight.SemiBold), Modifier.weight(1f))
+                }
+                val info = listOfNotNull(
+                    if (c.inMyDay) "☀ Heute" else null,
+                    c.dueLabel?.let { "📅 $it" },
+                    c.reminderLabel?.let { "🔔 " + it.substringBefore(',') },
+                ).joinToString("  ·  ")
+                if (info.isNotEmpty()) Text(info, color = Color.White.copy(alpha = 0.9f), style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.padding(start = 12.dp).clickable { openDates = true })
+            }
+            // ---- white sheet
+            Surface(
+                shape = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp),
+                color = MaterialTheme.colorScheme.surface,
+                modifier = Modifier.fillMaxSize()
+            ) {
+                Column(Modifier.verticalScroll(rememberScrollState()).padding(bottom = 24.dp).navigationBarsPadding()) {
+                    Accordion("Unteraufgaben",
+                        if (c.state.children.isEmpty()) "keine" else "${c.state.doneChildren}/${c.state.children.size}",
+                        openSub, c.accent, { openSub = !openSub }) {
+                        SubtaskTree(c, guide = true)
+                        AddSubtaskField(c, Modifier.padding(top = 2.dp, bottom = 6.dp))
+                    }
+                    Accordion("Notiz", if (c.note.isBlank()) "leer" else "${c.note.lines().size} Zeile(n)", openNote, c.accent, { openNote = !openNote }) {
+                        NoteField(c, Modifier.fillMaxWidth().heightIn(min = 80.dp).padding(bottom = 8.dp))
+                    }
+                    Accordion("Anhänge", c.state.attachments.size.toString(), openAtt, c.accent, { openAtt = !openAtt }) {
+                        AttachmentGrid(c)
+                    }
+                    Accordion("Termine & Erinnerung",
+                        listOfNotNull(c.dueLabel, c.reminderLabel?.substringBefore(','), if (c.inMyDay) "Mein Tag" else null).size.let { if (it == 0) "nichts gesetzt" else "$it gesetzt" },
+                        openDates, c.accent, { openDates = !openDates }, last = true) {
+                        DateRow(Icons.Outlined.WbSunny, if (c.inMyDay) "In „Mein Tag“" else "Zu „Mein Tag“ hinzufügen", c.inMyDay, c.accent) { c.vm.toggleMyDay() }
+                        DateRow(Icons.Outlined.CalendarToday, c.dueLabel?.let { "Fällig: $it" } ?: "Fälligkeitsdatum", c.dueLabel != null, c.accent, c.pickDue)
+                        DateRow(Icons.Outlined.NotificationsNone, c.reminderLabel?.let { "Erinnerung $it" } ?: "Erinnern", c.reminderLabel != null, c.accent, c.pickReminder)
+                    }
+                    Box(Modifier.padding(horizontal = 16.dp)) { CreatedText(c) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun Accordion(
+    title: String, meta: String, open: Boolean, accent: Color, onToggle: () -> Unit,
+    last: Boolean = false, content: @Composable () -> Unit,
+) {
+    val rot by androidx.compose.animation.core.animateFloatAsState(if (open) 90f else 0f, label = "acc")
+    Column(Modifier.fillMaxWidth().animateContentSizeCompat()) {
+        Row(
+            Modifier.fillMaxWidth().clickable(onClick = onToggle).padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(title, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+            Text(meta, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Icon(Icons.Filled.ChevronRight, if (open) "Zuklappen" else "Aufklappen",
+                tint = accent, modifier = Modifier.padding(start = 4.dp).size(20.dp).graphicsRotate(rot))
+        }
+        if (open) Column(Modifier.padding(horizontal = 12.dp)) { content() }
+        if (!last) HorizontalDivider(thickness = 1.5.dp, color = MaterialTheme.colorScheme.outline.copy(alpha = 0.45f))
+    }
+}
+
+@Composable
+private fun DateRow(icon: ImageVector, text: String, active: Boolean, accent: Color, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable(onClick = onClick).padding(horizontal = 6.dp, vertical = 11.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(icon, null, tint = if (active) accent else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(12.dp))
+        Text(text, color = if (active) accent.deepen() else MaterialTheme.colorScheme.onSurface)
+    }
+}
+
+private fun Modifier.graphicsRotate(deg: Float) = this.rotate(deg)
+@Composable
+private fun Modifier.animateContentSizeCompat() = this.then(Modifier.animateContentSize())

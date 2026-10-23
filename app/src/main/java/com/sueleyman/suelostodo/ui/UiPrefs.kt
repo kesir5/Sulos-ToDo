@@ -17,6 +17,8 @@ enum class DetailStyle(val title: String, val description: String) {
     HERO("1 · Hero-Header", "Farbiger Kopf mit Status-Chips, Inhalte als Karten"),
     TILES("2 · Kachel-Dashboard", "Eigenschaften als Kacheln, Fortschrittsring"),
     DOCUMENT("3 · Dokument", "Eigenschaften-Tabelle, Notiz als Fließtext"),
+    ACTIONBAR("4 · Aktionsleiste", "Schalterleiste unter dem Titel, Abschnitte durch Linien getrennt"),
+    SHEET("5 · Aufklappbare Abschnitte", "Farbiger Kopf, weißes Blatt mit auf-/zuklappbaren Abschnitten"),
 }
 
 enum class HomeStyle(val title: String, val description: String) {
