@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Sülos ToDo</string>
+    <string name="widget_name">Sülos ToDo</string>
+    <string name="widget_description">Offene Aufgaben einer Liste</string>
+</resources>
