@@ -113,6 +113,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.sueleyman.suelostodo.data.INBOX_ID
@@ -164,11 +165,12 @@ fun ListScreen(
     val accent = h?.color ?: Brand
     val isSmart = vm.smart != null
     val colored = style == TaskStyle.CLASSIC
-    val headerBlock = style == TaskStyle.TREE || style == TaskStyle.RING
+    val headerBlock = false
     val onHeader = if (colored || headerBlock) Color.White else MaterialTheme.colorScheme.onSurface
     val bg = when (style) {
         TaskStyle.CLASSIC -> accent
-        TaskStyle.TREE, TaskStyle.OUTLINER, TaskStyle.RING -> MaterialTheme.colorScheme.surface
+        TaskStyle.AGENDA -> MaterialTheme.colorScheme.surface
+        TaskStyle.CARDS -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f).compositeOver(MaterialTheme.colorScheme.background)
         else -> MaterialTheme.colorScheme.background
     }
 
@@ -207,7 +209,9 @@ fun ListScreen(
             delete = { deleteTask = it },
         )
     )
-    val grouped = !isSmart && (style == TaskStyle.GROUPS || style == TaskStyle.RING)
+    val grouped = !isSmart && style == TaskStyle.GROUPS
+    val agenda = !isSmart && style == TaskStyle.AGENDA
+    var addDialog by remember { mutableStateOf(autoAdd && style == TaskStyle.CARDS) }
 
     // ---------- drag & drop by long press
     val lazyState = rememberLazyListState()
@@ -300,7 +304,14 @@ fun ListScreen(
                 }
             )
         },
-        bottomBar = { AddTaskBar(autoAdd, accent, colored) { vm.addTask(it) } }
+        bottomBar = { if (style != TaskStyle.CARDS) AddTaskBar(autoAdd, accent, colored) { vm.addTask(it) } },
+        floatingActionButton = {
+            if (style == TaskStyle.CARDS) androidx.compose.material3.FloatingActionButton(
+                onClick = { addDialog = true },
+                containerColor = accent, contentColor = Color.White,
+                shape = RoundedCornerShape(16.dp)
+            ) { Icon(Icons.Filled.Add, "Aufgabe hinzufügen") }
+        }
     ) { pad ->
         LazyColumn(
             state = lazyState,
@@ -322,6 +333,12 @@ fun ListScreen(
                             }
                         )
                     }
+                }
+            } else if (agenda) {
+                // ---- Agenda: sections by due date (manual sorting is not used here)
+                agendaSections(dragRows).forEach { (b, rows) ->
+                    item(key = "ab" + b.name) { AgendaHeader(b, rows.count { it.isRoot }) }
+                    items(rows, key = { "o" + it.task.id }) { row -> FlatRow(row, ctx, Modifier.animateItem(), drag = null) }
                 }
             } else {
                 items(dragRows, key = { "o" + it.task.id }) { row ->
@@ -354,9 +371,16 @@ fun ListScreen(
         }
     }
 
+    if (addDialog) {
+        TextInputDialog(
+            title = "Neue Aufgabe", confirm = "Hinzufügen",
+            onDismiss = { addDialog = false },
+            onConfirm = { text, _ -> addDialog = false; vm.addTask(text) }
+        )
+    }
     if (renameDialog && h != null) {
         TextInputDialog(
-            title = "Liste bearbeiten", initial = h.title, withColor = h.colorIndex.coerceAtLeast(0),
+            title = "Liste bearbeiten", initial = h.title, withColor = if (h.smart == null) h.colorIndex else 0,
             onDismiss = { renameDialog = false },
             onConfirm = { name, color -> renameDialog = false; vm.renameList(name, color) }
         )
@@ -411,13 +435,13 @@ private fun ListHeaderBlock(
 ) {
     val subtitle = when {
         smart == SmartList.MY_DAY -> LocalDate.now().format(DateTimeFormatter.ofPattern("EEEE, d. MMMM", Locale.GERMAN))
-        style == TaskStyle.TREE -> "${state.openCount} offen · ${state.doneCount} erledigt"
-        style == TaskStyle.RING -> "${(state.progress * 100).toInt()} % erledigt"
+        style == TaskStyle.CARDS -> "${state.openCount} offen · ${state.doneCount} erledigt"
+        style == TaskStyle.AGENDA -> "Nach Fälligkeit"
         style == TaskStyle.GROUPS -> "Gruppiert nach Hauptaufgabe"
         else -> null
     }
     val titleColor = if (block || style == TaskStyle.CLASSIC) onHeader
-        else if (style == TaskStyle.OUTLINER) MaterialTheme.colorScheme.onSurface else accent
+        else accent
     Column(
         Modifier
             .fillMaxWidth()
@@ -434,7 +458,7 @@ private fun ListHeaderBlock(
         if (subtitle != null) Text(
             subtitle, color = titleColor.copy(alpha = 0.8f), style = MaterialTheme.typography.bodyMedium
         )
-        if (style == TaskStyle.RING) {
+        if (false) {
             Spacer(Modifier.height(8.dp))
             LinearProgressIndicator(
                 progress = { state.progress },
@@ -492,27 +516,12 @@ fun ExpandToggle(row: TreeRow, ctx: RowCtx, small: Boolean = false) {
                 Icon(icon, desc, tint = if (t.expanded) Color.White else accent, modifier = Modifier.size(14.dp))
             }
         }
-        TaskStyle.TREE -> Row(
-            Modifier.clip(RoundedCornerShape(14.dp)).clickable(onClick = onClick).padding(4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("${row.childCount}", style = MaterialTheme.typography.labelMedium, color = accent)
-            Spacer(Modifier.width(4.dp))
-            Box(
-                Modifier.size(24.dp).clip(CircleShape).background(accent.copy(alpha = 0.14f)),
-                contentAlignment = Alignment.Center
-            ) { Icon(icon, desc, tint = accent, modifier = Modifier.size(16.dp)) }
-        }
         TaskStyle.GROUPS -> Box(
             Modifier.size(if (small) 28.dp else 32.dp).clip(CircleShape)
                 .background(if (small) Color.Transparent else accent.copy(alpha = 0.14f))
                 .clickable(onClick = onClick),
             contentAlignment = Alignment.Center
         ) { Icon(icon, desc, tint = accent, modifier = Modifier.size(if (small) 16.dp else 18.dp)) }
-        TaskStyle.OUTLINER -> Box(
-            Modifier.size(28.dp).clip(CircleShape).clickable(onClick = onClick),
-            contentAlignment = Alignment.Center
-        ) { Icon(icon, desc, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp)) }
         TaskStyle.STRIPES -> Row(
             Modifier.clip(RoundedCornerShape(12.dp)).background(accent.copy(alpha = 0.14f))
                 .clickable(onClick = onClick).padding(horizontal = 8.dp, vertical = 3.dp),
@@ -522,7 +531,7 @@ fun ExpandToggle(row: TreeRow, ctx: RowCtx, small: Boolean = false) {
             Spacer(Modifier.width(2.dp))
             Text("${row.childCount}", style = MaterialTheme.typography.labelMedium, color = accent)
         }
-        TaskStyle.RING -> {
+        TaskStyle.CARDS, TaskStyle.AGENDA -> {
             val frac = if (row.childCount == 0) 0f else row.doneChildCount.toFloat() / row.childCount
             val track = accent.copy(alpha = 0.18f)
             Box(
@@ -617,8 +626,47 @@ private fun FlatRow(row: TreeRow, ctx: RowCtx, modifier: Modifier, drag: DragHoo
     val t = row.task
     val depth = if (ctx.tree) t.depth else 0
     when (ctx.style) {
-        TaskStyle.CLASSIC, TaskStyle.GROUPS, TaskStyle.RING -> {
-            // GROUPS/RING only reach here for smart lists -> card look
+        TaskStyle.CARDS -> {
+            RowMenuBox(row, ctx, modifier.padding(start = 12.dp + (depth * 20).dp, end = 12.dp, top = 4.dp, bottom = 4.dp), drag) { click ->
+                Surface(
+                    shape = RoundedCornerShape(if (depth == 0) 16.dp else 12.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    shadowElevation = if (depth == 0) 2.dp else 0.5.dp,
+                    modifier = Modifier.fillMaxWidth().animateContentSize().then(click)
+                ) {
+                    Column(Modifier.padding(start = 4.dp, end = 4.dp, top = 4.dp, bottom = 6.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            CheckCircle(t.done, ctx.accent, if (depth == 0) 20.dp else 16.dp) { ctx.actions.toggleDone(t.id) }
+                            TitleAndMeta(row, ctx, Modifier.weight(1f), depth, showChildCount = false, bold = depth == 0)
+                            if (ctx.tree && row.hasChildren) ExpandToggle(row, ctx)
+                            StarButton(t, ctx)
+                        }
+                        if (row.childCount > 0) ProgressSegments(row.doneChildCount, row.childCount, ctx.accent,
+                            Modifier.padding(start = 44.dp, bottom = 2.dp))
+                    }
+                }
+            }
+        }
+
+        TaskStyle.AGENDA -> {
+            val divider = MaterialTheme.colorScheme.outlineVariant
+            RowMenuBox(row, ctx, modifier, drag) { click ->
+                Row(
+                    Modifier.fillMaxWidth().then(click)
+                        .drawBehind { drawLine(divider, Offset(0f, size.height), Offset(size.width, size.height), 1.dp.toPx()) }
+                        .padding(start = (14 + depth * 22).dp, end = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    CheckCircle(t.done, ctx.accent, if (depth == 0) 18.dp else 15.dp) { ctx.actions.toggleDone(t.id) }
+                    TitleAndMeta(row, ctx, Modifier.weight(1f), depth)
+                    if (ctx.tree && row.hasChildren) ExpandToggle(row, ctx)
+                    StarButton(t, ctx)
+                }
+            }
+        }
+
+        TaskStyle.CLASSIC, TaskStyle.GROUPS -> {
+            // GROUPS only reaches here for smart lists -> card look
             val surface = MaterialTheme.colorScheme.surface
             val cardColor = if (depth == 0) surface else ctx.accent.copy(alpha = 0.10f).compositeOver(surface)
             RowMenuBox(row, ctx, modifier.padding(start = 10.dp + (depth * 22).dp, end = 10.dp, top = 2.dp, bottom = 2.dp), drag) { click ->
@@ -636,61 +684,6 @@ private fun FlatRow(row: TreeRow, ctx: RowCtx, modifier: Modifier, drag: DragHoo
                         TitleAndMeta(row, ctx, Modifier.weight(1f), depth)
                         StarButton(t, ctx)
                     }
-                }
-            }
-        }
-
-        TaskStyle.TREE -> {
-            val line = ctx.accent.copy(alpha = 0.45f)
-            val divider = MaterialTheme.colorScheme.outlineVariant
-            RowMenuBox(row, ctx, modifier, drag) { click ->
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .then(click)
-                        .drawBehind {
-                            drawLine(divider, Offset(0f, size.height), Offset(size.width, size.height), 0.5.dp.toPx())
-                            if (depth > 0) {
-                                val x = (14 + (depth - 1) * 22 + 10).dp.toPx()
-                                val y = size.height / 2
-                                drawLine(line, Offset(x, 0f), Offset(x, y), 1.dp.toPx())
-                                drawLine(line, Offset(x, y), Offset(x + 10.dp.toPx(), y), 1.dp.toPx())
-                            }
-                        }
-                        .padding(start = (14 + depth * 22).dp, end = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    CheckCircle(t.done, ctx.accent, if (depth == 0) 18.dp else 15.dp) { ctx.actions.toggleDone(t.id) }
-                    TitleAndMeta(row, ctx, Modifier.weight(1f), depth, showChildCount = false)
-                    if (ctx.tree && row.hasChildren) ExpandToggle(row, ctx)
-                    StarButton(t, ctx)
-                }
-            }
-        }
-
-        TaskStyle.OUTLINER -> {
-            val guide = MaterialTheme.colorScheme.outlineVariant
-            RowMenuBox(row, ctx, modifier, drag) { click ->
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .then(click)
-                        .drawBehind {
-                            for (i in 0 until depth) {
-                                val x = (8 + i * 22 + 14).dp.toPx()
-                                drawLine(guide, Offset(x, 0f), Offset(x, size.height), 1.dp.toPx())
-                            }
-                        }
-                        .padding(start = (8 + depth * 22).dp, end = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    if (ctx.tree && row.hasChildren) ExpandToggle(row, ctx)
-                    else Box(Modifier.size(28.dp), contentAlignment = Alignment.Center) {
-                        Box(Modifier.size(5.dp).clip(CircleShape).background(MaterialTheme.colorScheme.outline))
-                    }
-                    CheckCircle(t.done, MaterialTheme.colorScheme.outline, 15.dp) { ctx.actions.toggleDone(t.id) }
-                    TitleAndMeta(row, ctx, Modifier.weight(1f), depth, showChildCount = false, big = depth == 0)
-                    if (t.important) StarButton(t, ctx)
                 }
             }
         }
@@ -724,7 +717,7 @@ private fun FlatRow(row: TreeRow, ctx: RowCtx, modifier: Modifier, drag: DragHoo
 private fun GroupCard(group: List<TreeRow>, ctx: RowCtx, modifier: Modifier, drag: DragHook? = null) {
     val root = group.first()
     val t = root.task
-    val ring = ctx.style == TaskStyle.RING
+    val ring = false
     var menu by remember { mutableStateOf(false) }
     Box(modifier.padding(horizontal = 10.dp, vertical = if (ring) 3.dp else 5.dp)) {
         Surface(
@@ -842,7 +835,7 @@ private fun TitleAndMeta(
         if (hasMeta) Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
             if (listName != null) Text("$listName  ", style = MaterialTheme.typography.labelSmall, color = sub)
             if (ctx.showMyDay && t.myDay == today) MetaChip(Icons.Outlined.WbSunny, "Mein Tag", sub)
-            if (childMeta) MetaChip(Icons.Outlined.AccountTree, "${row.doneChildCount} von ${row.childCount}", if (ctx.style == TaskStyle.RING) ctx.accent else sub)
+            if (childMeta) MetaChip(Icons.Outlined.AccountTree, "${row.doneChildCount} von ${row.childCount}", if (ctx.style == TaskStyle.CARDS) ctx.accent else sub)
             t.dueDate?.let { d ->
                 val overdue = d < today && !t.done
                 MetaChip(Icons.Outlined.CalendarToday, formatDue(d), if (overdue) MaterialTheme.colorScheme.error else if (d == today) ctx.accent else sub)
@@ -915,4 +908,63 @@ private fun AddTaskBar(autoFocus: Boolean, accent: Color, colored: Boolean, onAd
         }
     }
     LaunchedEffect(autoFocus) { if (autoFocus) runCatching { fr.requestFocus() } }
+}
+
+
+// ===================================================================== D · Moderne Karten / E · Agenda helpers
+
+/** Small segment bars showing how many subtasks are done. */
+@Composable
+private fun ProgressSegments(done: Int, total: Int, color: Color, modifier: Modifier = Modifier) {
+    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+        val shown = total.coerceAtMost(10)
+        repeat(shown) { i ->
+            val filled = if (total <= 10) i < done else i < (done * 10 / total)
+            Box(Modifier.padding(end = 3.dp).size(width = 16.dp, height = 4.dp).clip(RoundedCornerShape(2.dp))
+                .background(if (filled) color else color.copy(alpha = 0.2f)))
+        }
+        Text("$done/$total", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 3.dp))
+    }
+}
+
+enum class AgendaBucket(val label: String, val color: Color, val bg: Color) {
+    OVERDUE("Überfällig", Color(0xFFC4314B), Color(0xFFFCE6EA)),
+    TODAY("Heute", Color(0xFF185FA5), Color(0xFFE6F1FB)),
+    TOMORROW("Morgen", Color(0xFF0F6E56), Color(0xFFE1F5EE)),
+    WEEK("Diese Woche", Color(0xFF3E8A5E), Color(0xFFE8F3EC)),
+    LATER("Später", Color(0xFF5D5A58), Color(0xFFF1F0EC)),
+    NONE("Ohne Datum", Color(0xFF5D5A58), Color(0xFFF1F0EC)),
+}
+
+/** Groups the visible rows (root + its subtasks) by the root's due date. */
+fun agendaSections(rows: List<TreeRow>): List<Pair<AgendaBucket, List<TreeRow>>> {
+    val today = LocalDate.now().toEpochDay()
+    fun bucket(due: Long?) = when {
+        due == null -> AgendaBucket.NONE
+        due < today -> AgendaBucket.OVERDUE
+        due == today -> AgendaBucket.TODAY
+        due == today + 1 -> AgendaBucket.TOMORROW
+        due <= today + 7 -> AgendaBucket.WEEK
+        else -> AgendaBucket.LATER
+    }
+    val groups = groupRows(rows)
+    return AgendaBucket.entries.mapNotNull { b ->
+        val inB = groups.filter { bucket(it.first().task.dueDate) == b }
+            .sortedWith(compareBy({ it.first().task.dueDate ?: Long.MAX_VALUE }, { it.first().task.sortOrder }))
+        if (inB.isEmpty()) null else b to inB.flatten()
+    }
+}
+
+@Composable
+private fun AgendaHeader(b: AgendaBucket, count: Int) {
+    Row(
+        Modifier.fillMaxWidth().padding(start = 10.dp, end = 10.dp, top = 10.dp, bottom = 2.dp)
+            .clip(RoundedCornerShape(6.dp)).background(b.bg).padding(horizontal = 12.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(b.label.uppercase(), color = b.color, fontWeight = FontWeight.Bold, fontSize = 11.sp, letterSpacing = 0.6.sp,
+            modifier = Modifier.weight(1f))
+        Text("$count", color = b.color, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+    }
 }

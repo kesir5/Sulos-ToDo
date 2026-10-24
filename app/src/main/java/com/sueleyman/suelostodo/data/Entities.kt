@@ -112,5 +112,12 @@ object ListColors {
         0xFF5D5A58, // Grau
     )
     val names = listOf("Blau", "Lila", "Rot", "Grün", "Orange", "Pink", "Türkis", "Grau")
-    fun argb(index: Int): Long = all[index.mod(all.size)]
+    /**
+     * List colour. Small values (0..7) are palette indices; any other value is a free colour
+     * stored directly as ARGB int (alpha 0xFF => negative int).
+     */
+    fun argb(index: Int): Long =
+        if (index in 0..255) all[index.mod(all.size)] else index.toLong() and 0xFFFFFFFFL
+
+    fun isCustom(index: Int) = index !in 0..255
 }

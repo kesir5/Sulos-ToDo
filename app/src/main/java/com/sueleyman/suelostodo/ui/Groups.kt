@@ -166,7 +166,7 @@ private fun hex(c: Long) = "#%06X".format(c and 0xFFFFFF)
 /** Free colour choice for a group: presets, hue/saturation/brightness sliders or hex code. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun GroupColorDialog(name: String, initial: Long?, onDismiss: () -> Unit, onPick: (Long?) -> Unit) {
+fun GroupColorDialog(name: String, initial: Long?, onDismiss: () -> Unit, allowAuto: Boolean = true, onPick: (Long?) -> Unit) {
     val start = initial ?: PRESETS[0]
     var h by remember { mutableFloatStateOf(hsv(start)[0]) }
     var sat by remember { mutableFloatStateOf(hsv(start)[1]) }
@@ -224,7 +224,7 @@ fun GroupColorDialog(name: String, initial: Long?, onDismiss: () -> Unit, onPick
         confirmButton = { TextButton(onClick = { onPick(current) }) { Text("Übernehmen") } },
         dismissButton = {
             Row {
-                TextButton(onClick = { onPick(null) }) { Text("Automatisch") }
+                if (allowAuto) TextButton(onClick = { onPick(null) }) { Text("Automatisch") }
                 TextButton(onClick = onDismiss) { Text("Abbrechen") }
             }
         }

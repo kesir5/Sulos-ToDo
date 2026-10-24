@@ -78,3 +78,16 @@ class SearchTest {
         org.junit.Assert.assertTrue(ls.isEmpty())
     }
 }
+
+class AgendaTest {
+    @org.junit.Test fun buckets_by_due_date() {
+        val today = java.time.LocalDate.now().toEpochDay()
+        fun t(id: String, due: Long?, parent: String? = null) =
+            com.sueleyman.suelostodo.data.Task(id = id, listId = "l", title = id, dueDate = due, parentId = parent, depth = if (parent == null) 0 else 1)
+        val tasks = listOf(t("a", today - 1), t("b", today), t("b1", null, "b"), t("c", today + 1), t("d", today + 3), t("e", today + 30), t("f", null))
+        val secs = agendaSections(flattenTree(tasks))
+        org.junit.Assert.assertEquals(
+            listOf("OVERDUE", "TODAY", "TOMORROW", "WEEK", "LATER", "NONE"), secs.map { it.first.name })
+        org.junit.Assert.assertEquals(listOf("b", "b1"), secs[1].second.map { it.task.id })
+    }
+}

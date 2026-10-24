@@ -30,6 +30,10 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -303,90 +307,139 @@ fun TaskDetailScreen(taskId: String, onBack: () -> Unit, onOpenTask: (String) ->
 // 1 · HERO
 // =====================================================================================
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun HeroDetail(c: DetailCtx) {
     val t = c.task
+    val light = c.accent.copy(alpha = 0.72f).compositeOver(Color.White)
+    val n = c.state.children.size
+    val frac = if (n == 0) 0f else c.state.doneChildren.toFloat() / n
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            TopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = c.accent, titleContentColor = Color.White,
-                    navigationIconContentColor = Color.White, actionIconContentColor = Color.White
-                ),
-                title = { Breadcrumb(c, Color.White) },
-                navigationIcon = { IconButton(onClick = c.onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Zurück") } },
-                actions = { DetailActions(c) }
-            )
-        },
-        bottomBar = { CreatedBar(c) }
-    ) { pad ->
-        Column(Modifier.fillMaxSize().padding(pad).imePadding().verticalScroll(rememberScrollState())) {
-            // colored hero
-            Column(Modifier.fillMaxWidth().background(c.accent).padding(start = 8.dp, end = 8.dp, bottom = 18.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    CheckCircle(t.done, Color.White, 24.dp) { c.vm.toggleDone() }
-                    TitleField(c, MaterialTheme.typography.headlineSmall.copy(color = Color.White, fontWeight = FontWeight.SemiBold), Modifier.weight(1f))
-                    IconButton(onClick = { c.vm.toggleImportant() }) {
-                        Icon(if (t.important) Icons.Filled.Star else Icons.Outlined.StarOutline, "Wichtig", tint = Color.White)
+        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f).compositeOver(MaterialTheme.colorScheme.background),
+        bottomBar = {
+            // fixed action bar: complete + delete
+            Row(
+                Modifier.fillMaxWidth().navigationBarsPadding().imePadding().padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(16.dp), color = c.accent, shadowElevation = 4.dp,
+                    modifier = Modifier.weight(1f).height(50.dp).clip(RoundedCornerShape(16.dp)).clickable { c.vm.toggleDone() }
+                ) {
+                    Row(horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Filled.Check, null, tint = Color.White)
+                        Spacer(Modifier.width(8.dp))
+                        Text(if (t.done) "Wieder öffnen" else "Als erledigt markieren", color = Color.White, fontWeight = FontWeight.SemiBold)
                     }
                 }
-                FlowRow(
-                    Modifier.padding(start = 12.dp, top = 6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                Spacer(Modifier.width(8.dp))
+                Surface(
+                    shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surface,
+                    modifier = Modifier.size(50.dp).clip(RoundedCornerShape(16.dp)).clickable(onClick = c.askDelete)
+                ) { Box(contentAlignment = Alignment.Center) { Icon(Icons.Outlined.Delete, "Löschen") } }
+            }
+        }
+    ) { pad ->
+        Column(Modifier.fillMaxSize().padding(pad).verticalScroll(rememberScrollState())) {
+            // ---- rounded hero card with gradient
+            Surface(
+                shape = RoundedCornerShape(26.dp), shadowElevation = 6.dp, color = Color.Transparent,
+                modifier = Modifier.fillMaxWidth().statusBarsPaddingCompat().padding(10.dp)
+            ) {
+                Column(
+                    Modifier.background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(c.accent, light)))
+                        .padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 16.dp)
                 ) {
-                    HeroChip(Icons.Outlined.WbSunny, if (c.inMyDay) "Mein Tag" else "Zu Mein Tag", c.inMyDay, c.accent) { c.vm.toggleMyDay() }
-                    HeroChip(Icons.Outlined.CalendarToday, c.dueLabel ?: "Fällig", c.dueLabel != null, c.accent, c.pickDue)
-                    HeroChip(Icons.Outlined.NotificationsNone, c.reminderLabel ?: "Erinnern", c.reminderLabel != null, c.accent, c.pickReminder)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        GlassButton(onClick = c.onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Zurück", tint = Color.White, modifier = Modifier.size(20.dp)) }
+                        Spacer(Modifier.width(8.dp))
+                        Box(Modifier.weight(1f)) { Breadcrumb(c, Color.White.copy(alpha = 0.9f)) }
+                        GlassButton(onClick = { c.vm.toggleImportant() }) {
+                            Icon(if (t.important) Icons.Filled.Star else Icons.Outlined.StarOutline, "Wichtig", tint = Color.White, modifier = Modifier.size(20.dp))
+                        }
+                        if (t.depth == 0) {
+                            Spacer(Modifier.width(6.dp))
+                            GlassButton(onClick = c.askMove) {
+                                Icon(Icons.AutoMirrored.Outlined.DriveFileMove, "In Liste verschieben", tint = Color.White, modifier = Modifier.size(20.dp))
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(14.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        // progress ring of the subtasks (or check circle without subtasks)
+                        Box(Modifier.size(52.dp).clip(CircleShape).clickable { c.vm.toggleDone() }, contentAlignment = Alignment.Center) {
+                            Canvas(Modifier.size(48.dp)) {
+                                val sw = 5.dp.toPx(); val d = size.minDimension - sw; val tl = Offset(sw / 2, sw / 2)
+                                drawArc(Color.White.copy(alpha = 0.3f), 0f, 360f, false, tl, Size(d, d), style = Stroke(sw))
+                                drawArc(Color.White, -90f, 360f * (if (t.done) 1f else frac), false, tl, Size(d, d),
+                                    style = Stroke(sw, cap = androidx.compose.ui.graphics.StrokeCap.Round))
+                            }
+                            if (n > 0 && !t.done) Text("${c.state.doneChildren}/$n", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            else Icon(Icons.Filled.Check, null,
+                                tint = if (t.done) Color.White else Color.White.copy(alpha = 0.5f), modifier = Modifier.size(20.dp))
+                        }
+                        Spacer(Modifier.width(10.dp))
+                        TitleField(c, MaterialTheme.typography.headlineSmall.copy(color = Color.White, fontWeight = FontWeight.Bold), Modifier.weight(1f))
+                    }
+                    FlowRow(
+                        Modifier.padding(top = 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        HeroChip(Icons.Outlined.WbSunny, if (c.inMyDay) "Mein Tag" else "Zu Mein Tag", c.inMyDay, c.accent) { c.vm.toggleMyDay() }
+                        HeroChip(Icons.Outlined.CalendarToday, c.dueLabel ?: "Fällig", c.dueLabel != null,
+                            if (c.overdue) Color(0xFFC4314B) else c.accent, c.pickDue)
+                        HeroChip(Icons.Outlined.NotificationsNone, c.reminderLabel?.substringBefore(',') ?: "Erinnern", c.reminderLabel != null, c.accent, c.pickReminder)
+                    }
                 }
             }
-            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(Modifier.padding(horizontal = 14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                HeroSection("Unteraufgaben", if (n > 0) "${c.state.doneChildren}/$n" else null)
                 HeroCard {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Unteraufgaben", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
-                        if (c.state.children.isNotEmpty()) Text(
-                            "${c.state.doneChildren} von ${c.state.children.size}",
-                            style = MaterialTheme.typography.labelMedium, color = c.accent
-                        )
-                    }
-                    if (c.state.children.isNotEmpty()) {
-                        Spacer(Modifier.height(8.dp))
-                        LinearProgressIndicator(
-                            progress = { c.state.doneChildren.toFloat() / c.state.children.size },
-                            color = c.accent, trackColor = c.accent.copy(alpha = 0.15f),
-                            modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp))
-                        )
-                    }
-                    Spacer(Modifier.height(4.dp))
                     SubtaskTree(c, guide = false)
-                    AddSubtaskField(c, Modifier.padding(top = 4.dp))
+                    AddSubtaskField(c, Modifier.padding(top = 2.dp))
                 }
-                HeroCard {
-                    Text("Notiz", style = MaterialTheme.typography.titleSmall)
-                    Spacer(Modifier.height(4.dp))
-                    NoteField(c, Modifier.heightIn(min = 80.dp))
+                HeroSection("Notiz")
+                Surface(shape = RoundedCornerShape(16.dp), color = Color(0xFFFFF8E5), modifier = Modifier.fillMaxWidth()) {
+                    NoteField(c, Modifier.padding(14.dp).heightIn(min = 72.dp), Color(0xFF5C4400))
                 }
-                HeroCard {
-                    Text("Anhänge", style = MaterialTheme.typography.titleSmall)
-                    Spacer(Modifier.height(8.dp))
-                    AttachmentGrid(c)
-                }
+                HeroSection("Anhänge", c.state.attachments.size.takeIf { it > 0 }?.toString())
+                AttachmentStrip(c)
+                CreatedText(c)
+                Spacer(Modifier.height(12.dp))
             }
         }
     }
 }
 
 @Composable
+private fun Modifier.statusBarsPaddingCompat() = this.then(Modifier.windowInsetsPadding(WindowInsets.statusBars))
+
+/** Round, semi-transparent "glass" button on the gradient header. */
+@Composable
+private fun GlassButton(onClick: () -> Unit, content: @Composable () -> Unit) {
+    Box(
+        Modifier.size(34.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.22f)).clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) { content() }
+}
+
+@Composable
+private fun HeroSection(title: String, meta: String? = null) {
+    Row(Modifier.fillMaxWidth().padding(top = 10.dp, start = 2.dp, end = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+        meta?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+    }
+}
+
+@Composable
 private fun HeroChip(icon: ImageVector, text: String, active: Boolean, accent: Color, onClick: () -> Unit) {
-    val bg = if (active) Color.White else Color.Transparent
+    val bg = if (active) Color.White else Color.White.copy(alpha = 0.2f)
     val fg = if (active) accent else Color.White
     Row(
         Modifier
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(14.dp))
             .background(bg)
-            .then(if (active) Modifier else Modifier.border(1.dp, Color.White.copy(alpha = 0.6f), RoundedCornerShape(16.dp)))
             .clickable(onClick = onClick)
             .padding(horizontal = 10.dp, vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -399,8 +452,8 @@ private fun HeroChip(icon: ImageVector, text: String, active: Boolean, accent: C
 
 @Composable
 private fun HeroCard(content: @Composable () -> Unit) {
-    Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surface, modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(14.dp)) { content() }
+    Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surface, shadowElevation = 1.dp, modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) { content() }
     }
 }
 

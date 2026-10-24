@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.AlertDialog
@@ -94,7 +95,16 @@ fun TextInputDialog(
 ) {
     var text by rememberSaveable { mutableStateOf(initial) }
     var color by remember { mutableIntStateOf(withColor ?: 0) }
+    var pickColor by remember { mutableStateOf(false) }
     val fr = remember { FocusRequester() }
+    if (pickColor) {
+        GroupColorDialog(
+            name = text.ifBlank { "Liste" }, initial = ListColors.argb(color),
+            allowAuto = false,
+            onDismiss = { pickColor = false },
+            onPick = { c -> pickColor = false; if (c != null) color = c.toInt() }
+        )
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
@@ -106,7 +116,20 @@ fun TextInputDialog(
                 )
                 if (withColor != null) {
                     Spacer(Modifier.size(12.dp))
-                    ColorPicker(color) { color = it }
+                    // same full colour screen as "Farbe wählen" for groups
+                    Row(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable { pickColor = true }
+                            .padding(vertical = 8.dp, horizontal = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(Modifier.size(32.dp).clip(CircleShape).background(listColor(color)))
+                        Spacer(Modifier.width(12.dp))
+                        Text("Farbe wählen …", color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f))
+                        Text(
+                            "#%06X".format(ListColors.argb(color) and 0xFFFFFF),
+                            style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
         },
