@@ -17,6 +17,9 @@ enum class DetailStyle(val title: String, val description: String) {
     DOCUMENT("2 · Dokument", "Eigenschaften-Tabelle, Notiz als Fließtext"),
     ACTIONBAR("3 · Aktionsleiste", "Schalterleiste unter dem Titel, Abschnitte durch Linien getrennt"),
     SHEET("4 · Aufklappbare Abschnitte", "Farbiger Kopf, weißes Blatt mit auf-/zuklappbaren Abschnitten"),
+    TIMELINE("5 · Zeitleiste", "Erstellt → Unteraufgaben → Erinnerung → Fällig auf einer Linie"),
+    TABS("6 · Tabs", "Termine als Chips, Reiter für Unteraufgaben, Notiz und Anhänge"),
+    NOTEPAD("7 · Notizblock", "Liniertes Papier, Anhänge als angeheftete Zettel"),
 }
 
 enum class HomeStyle(val title: String, val description: String) {
@@ -35,6 +38,9 @@ object UiPrefs {
     val hideDone: StateFlow<Boolean> = _hideDone
     fun setHideDone(c: Context, v: Boolean) {
         c.getSharedPreferences("ui", Context.MODE_PRIVATE).edit().putBoolean("hideDone", v).apply()
+        c.getSharedPreferences("ui", Context.MODE_PRIVATE).let { p ->
+            _detailColor.value = if (p.contains("detailColor")) p.getLong("detailColor", 0L) else null
+        }
         _hideDone.value = v
     }
 
@@ -61,6 +67,17 @@ object UiPrefs {
         _detail.value = s
     }
 
+    private val _detailColor = MutableStateFlow<Long?>(null)
+    /** Accent colour of the detail page; null = colour of the task's list. */
+    val detailColor: StateFlow<Long?> = _detailColor
+
+    fun setDetailColor(c: Context, v: Long?) {
+        c.getSharedPreferences("ui", Context.MODE_PRIVATE).edit().apply {
+            if (v == null) remove("detailColor") else putLong("detailColor", v)
+        }.apply()
+        _detailColor.value = v
+    }
+
     private val _style = MutableStateFlow(TaskStyle.CLASSIC)
     val style: StateFlow<TaskStyle> = _style
 
@@ -73,6 +90,9 @@ object UiPrefs {
         val h = c.getSharedPreferences("ui", Context.MODE_PRIVATE).getString("home", null)
         _home.value = HomeStyle.entries.firstOrNull { it.name == h } ?: HomeStyle.BANDS
         _name.value = c.getSharedPreferences("ui", Context.MODE_PRIVATE).getString("name", "") ?: ""
+        c.getSharedPreferences("ui", Context.MODE_PRIVATE).let { p ->
+            _detailColor.value = if (p.contains("detailColor")) p.getLong("detailColor", 0L) else null
+        }
         _hideDone.value = c.getSharedPreferences("ui", Context.MODE_PRIVATE).getBoolean("hideDone", false)
     }
 

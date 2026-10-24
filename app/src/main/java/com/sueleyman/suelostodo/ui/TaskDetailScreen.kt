@@ -62,6 +62,17 @@ import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.NotificationsNone
 import androidx.compose.material.icons.outlined.StarOutline
 import androidx.compose.material.icons.outlined.WbSunny
+import androidx.compose.material.icons.outlined.Print
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material.icons.outlined.Dashboard
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.lightColorScheme
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.graphics.toArgb
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.animation.animateContentSize
 import androidx.compose.material3.AlertDialog
@@ -151,6 +162,9 @@ class DetailCtx(
     val removeAttachment: (Attachment) -> Unit,
     val askDelete: () -> Unit,
     val askMove: () -> Unit,
+    val print: () -> Unit,
+    val openDesign: () -> Unit,
+    val openColor: () -> Unit,
     val onBack: () -> Unit,
 ) {
     val today: Long = LocalDate.now().toEpochDay()
@@ -172,7 +186,9 @@ fun TaskDetailScreen(taskId: String, onBack: () -> Unit, onOpenTask: (String) ->
     val style by UiPrefs.detailStyle.collectAsState()
     val context = LocalContext.current
     val task = state.task
-    val accent = state.list?.let { listColor(it.color) } ?: Brand
+    val listAccent = state.list?.let { listColor(it.color) } ?: Brand
+    val customColor by UiPrefs.detailColor.collectAsState()
+    val accent = customColor?.let { Color(it) } ?: listAccent
 
     var loaded by remember { mutableStateOf(false) }
     LaunchedEffect(task) {
@@ -193,6 +209,9 @@ fun TaskDetailScreen(taskId: String, onBack: () -> Unit, onOpenTask: (String) ->
     var confirmDelete by remember { mutableStateOf(false) }
     var moveDialog by remember { mutableStateOf(false) }
     var removeAtt by remember { mutableStateOf<Attachment?>(null) }
+    var designDialog by remember { mutableStateOf(false) }
+    var colorDialog by remember { mutableStateOf(false) }
+    val printScope = androidx.compose.runtime.rememberCoroutineScope()
 
     val toastFail = { ok: Boolean -> if (!ok) Toast.makeText(context, "Anhang konnte nicht gespeichert werden", Toast.LENGTH_SHORT).show() }
     val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
@@ -225,6 +244,11 @@ fun TaskDetailScreen(taskId: String, onBack: () -> Unit, onOpenTask: (String) ->
         removeAttachment = { removeAtt = it },
         askDelete = { confirmDelete = true },
         askMove = { moveDialog = true },
+        print = {
+            printScope.launch { vm.printHtml()?.let { com.sueleyman.suelostodo.util.TaskPrinter.print(context, it, task.title) } }
+        },
+        openDesign = { designDialog = true },
+        openColor = { colorDialog = true },
         onBack = onBack,
     )
 
@@ -233,7 +257,19 @@ fun TaskDetailScreen(taskId: String, onBack: () -> Unit, onOpenTask: (String) ->
         DetailStyle.DOCUMENT -> DocumentDetail(ctx)
         DetailStyle.ACTIONBAR -> ActionBarDetail(ctx)
         DetailStyle.SHEET -> SheetDetail(ctx)
+        DetailStyle.TIMELINE -> TimelineDetail(ctx)
+        DetailStyle.TABS -> TabsDetail(ctx)
+        DetailStyle.NOTEPAD -> NotepadDetail(ctx)
     }
+
+    if (designDialog) StyleDialog(
+        "Design der Aufgabendetails", DetailStyle.entries, style, { it.title }, { it.description },
+        onDismiss = { designDialog = false }
+    ) { UiPrefs.setDetailStyle(context, it); designDialog = false }
+    if (colorDialog) GroupColorDialog(
+        "Aufgabendetails", customColor ?: (listAccent.toArgb().toLong() and 0xFFFFFFFFL),
+        onDismiss = { colorDialog = false }
+    ) { UiPrefs.setDetailColor(context, it); colorDialog = false }
 
     // ---------- dialogs ----------
     if (dueDialog) {
@@ -360,6 +396,16 @@ private fun HeroDetail(c: DetailCtx) {
                             Spacer(Modifier.width(6.dp))
                             GlassButton(onClick = c.askMove) {
                                 Icon(Icons.AutoMirrored.Outlined.DriveFileMove, "In Liste verschieben", tint = Color.White, modifier = Modifier.size(20.dp))
+                            }
+                        }
+                        Spacer(Modifier.width(6.dp))
+                        GlassButton(onClick = c.print) {
+                            Icon(Icons.Outlined.Print, "Aufgabe drucken", tint = Color.White, modifier = Modifier.size(20.dp))
+                        }
+                        Spacer(Modifier.width(6.dp))
+                        DetailMenu(c) { open ->
+                            GlassButton(onClick = open) {
+                                Icon(Icons.Filled.MoreVert, "Menü", tint = Color.White, modifier = Modifier.size(20.dp))
                             }
                         }
                     }
@@ -581,6 +627,28 @@ private fun Breadcrumb(c: DetailCtx, color: Color) {
 private fun DetailActions(c: DetailCtx, withDelete: Boolean = false) {
     if (c.task.depth == 0) IconButton(onClick = c.askMove) { Icon(Icons.AutoMirrored.Outlined.DriveFileMove, "In Liste verschieben") }
     if (withDelete) IconButton(onClick = c.askDelete) { Icon(Icons.Outlined.Delete, "Löschen") }
+    IconButton(onClick = c.print) { Icon(Icons.Outlined.Print, "Aufgabe drucken") }
+    DetailMenu(c)
+}
+
+/** ⋮ menu of the detail page (always the right-most icon): design + accent colour. */
+@Composable
+private fun DetailMenu(
+    c: DetailCtx,
+    button: @Composable (open: () -> Unit) -> Unit = { open ->
+        IconButton(onClick = open) { Icon(Icons.Filled.MoreVert, "Menü", tint = LocalContentColor.current) }
+    },
+) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        button { open = true }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            DropdownMenuItem(text = { Text("Design der Details") }, leadingIcon = { Icon(Icons.Outlined.Dashboard, null) },
+                onClick = { open = false; c.openDesign() })
+            DropdownMenuItem(text = { Text("Farbe ändern") }, leadingIcon = { Icon(Icons.Outlined.Palette, null, tint = c.accent) },
+                onClick = { open = false; c.openColor() })
+        }
+    }
 }
 
 @Composable
@@ -620,9 +688,10 @@ private fun TitleField(c: DetailCtx, style: TextStyle, modifier: Modifier) {
 @Composable
 private fun NoteField(
     c: DetailCtx, modifier: Modifier, color: Color = MaterialTheme.colorScheme.onSurface,
-    placeholder: String = "Notiz hinzufügen", big: Boolean = false,
+    placeholder: String = "Notiz hinzufügen", big: Boolean = false, serif: Boolean = false,
 ) {
-    val st = (if (big) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.bodyMedium).copy(color = color, lineHeight = if (big) 26.sp else 21.sp)
+    val base = (if (big) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.bodyMedium).copy(color = color, lineHeight = if (big) 26.sp else 21.sp)
+    val st = if (serif) base.copy(fontFamily = FontFamily.Serif, fontStyle = FontStyle.Italic) else base
     Box(modifier) {
         if (c.note.isEmpty()) Text(placeholder, style = st.copy(color = color.copy(alpha = 0.5f)))
         BasicTextField(
@@ -637,9 +706,10 @@ private fun NoteField(
 /** Nested subtasks with plus/minus toggles. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun SubtaskTree(c: DetailCtx, guide: Boolean) {
+private fun SubtaskTree(c: DetailCtx, guide: Boolean, divided: Boolean = false) {
     val line = c.accent.copy(alpha = 0.35f)
-    c.state.subRows.forEach { r ->
+    c.state.subRows.forEachIndexed { i, r ->
+        if (divided && i > 0) HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
         val t = r.task
         val level = t.depth - c.task.depth - 1
         Row(
@@ -1028,3 +1098,337 @@ private fun DateRow(icon: ImageVector, text: String, active: Boolean, accent: Co
 private fun Modifier.graphicsRotate(deg: Float) = this.rotate(deg)
 @Composable
 private fun Modifier.animateContentSizeCompat() = this.then(Modifier.animateContentSize())
+
+// =====================================================================================
+// 5 · TIMELINE – created → subtasks → My Day → reminder → due on one vertical line
+// =====================================================================================
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+private fun TimelineDetail(c: DetailCtx) {
+    val t = c.task
+    val red = Color(0xFFC4314B)
+    val amber = Color(0xFFE0A100)
+    val lineColor = c.accent.copy(alpha = 0.3f)
+    val n = c.state.children.size
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.surface,
+        topBar = {
+            TopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
+                title = { Breadcrumb(c, c.accent) },
+                navigationIcon = { IconButton(onClick = c.onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Zurück") } },
+                actions = {
+                    IconButton(onClick = { c.vm.toggleImportant() }) {
+                        Icon(if (t.important) Icons.Filled.Star else Icons.Outlined.StarOutline, "Wichtig",
+                            tint = if (t.important) red else LocalContentColorOrDefault())
+                    }
+                    DetailActions(c, withDelete = true)
+                }
+            )
+        }
+    ) { pad ->
+        Column(Modifier.fillMaxSize().padding(pad).imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                CheckCircle(t.done, c.accent, 24.dp) { c.vm.toggleDone() }
+                TitleField(c, MaterialTheme.typography.headlineSmall.copy(color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold), Modifier.weight(1f))
+            }
+            Spacer(Modifier.height(8.dp))
+            // the vertical line is drawn behind all entries
+            Column(
+                Modifier.fillMaxWidth().drawBehind {
+                    val x = 11.dp.toPx()
+                    drawLine(lineColor, Offset(x, 10.dp.toPx()), Offset(x, size.height - 14.dp.toPx()), 2.dp.toPx())
+                }
+            ) {
+                val created = Instant.ofEpochMilli(t.createdAt).atZone(ZoneId.systemDefault())
+                    .format(DateTimeFormatter.ofPattern("EEE, d. MMM yyyy", Locale.GERMAN))
+                TimelineItem("Erstellt", c.accent, filled = true) { Text(created, style = MaterialTheme.typography.bodyMedium) }
+                TimelineItem(if (n > 0) "Unteraufgaben · ${c.state.doneChildren}/$n" else "Unteraufgaben", c.accent, filled = n > 0 && c.state.doneChildren == n) {
+                    SubtaskTree(c, guide = true, divided = true)
+                    if (n > 0) HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
+                    AddSubtaskField(c, Modifier.padding(top = 2.dp))
+                }
+                TimelineItem("Mein Tag", c.accent, filled = c.inMyDay, onClick = { c.vm.toggleMyDay() }) {
+                    TimelineValue(if (c.inMyDay) "Heute in „Mein Tag“" else "Zu „Mein Tag“ hinzufügen", c.inMyDay)
+                }
+                TimelineItem("Erinnerung", amber, filled = false, onClick = c.pickReminder) {
+                    TimelineValue(c.reminderLabel ?: "Erinnerung festlegen", c.reminderLabel != null)
+                }
+                TimelineItem("Fällig", if (c.overdue) red else c.accent, filled = false, onClick = c.pickDue, labelColor = if (c.overdue) red else null) {
+                    TimelineValue(c.dueLabel ?: "Fälligkeitsdatum festlegen", c.dueLabel != null, if (c.overdue) red else null)
+                }
+            }
+            Spacer(Modifier.height(10.dp))
+            Surface(shape = RoundedCornerShape(12.dp), color = c.accent.copy(alpha = 0.08f).compositeOver(MaterialTheme.colorScheme.surface),
+                modifier = Modifier.fillMaxWidth()) {
+                Row(Modifier.padding(12.dp)) {
+                    Icon(Icons.AutoMirrored.Outlined.StickyNote2, null, tint = c.accent, modifier = Modifier.size(18.dp).padding(top = 2.dp))
+                    Spacer(Modifier.width(8.dp))
+                    NoteField(c, Modifier.weight(1f).heightIn(min = 56.dp))
+                }
+            }
+            Spacer(Modifier.height(10.dp))
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                c.state.attachments.forEach { a -> AttachmentChip(c, a) }
+                AddAttachmentButton(c) { open ->
+                    Row(
+                        Modifier.clip(RoundedCornerShape(6.dp)).clickable(onClick = open).padding(horizontal = 6.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Outlined.AttachFile, null, tint = c.accent, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Anhang", color = c.accent, style = MaterialTheme.typography.labelLarge)
+                    }
+                }
+            }
+            Spacer(Modifier.height(24.dp).navigationBarsPadding())
+        }
+    }
+}
+
+@Composable
+private fun TimelineItem(
+    label: String, dot: Color, filled: Boolean, onClick: (() -> Unit)? = null, labelColor: Color? = null,
+    content: @Composable () -> Unit,
+) {
+    val surface = MaterialTheme.colorScheme.surface
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .padding(bottom = 12.dp)
+    ) {
+        Box(Modifier.width(24.dp).padding(top = 3.dp), contentAlignment = Alignment.TopCenter) {
+            Box(
+                Modifier.size(12.dp).clip(CircleShape).background(if (filled) dot else surface)
+                    .border(2.dp, dot, CircleShape)
+            )
+        }
+        Spacer(Modifier.width(8.dp))
+        Column(Modifier.weight(1f)) {
+            Text(label.uppercase(), fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.6.sp,
+                color = labelColor ?: MaterialTheme.colorScheme.onSurfaceVariant)
+            content()
+        }
+    }
+}
+
+@Composable
+private fun TimelineValue(text: String, set: Boolean, color: Color? = null) {
+    Text(text, style = MaterialTheme.typography.bodyMedium,
+        color = color ?: if (set) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outline)
+}
+
+// =====================================================================================
+// 6 · TABS – dates as chips, switchable tabs for subtasks / note / attachments
+// =====================================================================================
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+private fun TabsDetail(c: DetailCtx) {
+    val t = c.task
+    val n = c.state.children.size
+    var tab by rememberSaveable(t.id) { mutableStateOf(0) }
+    val surface = MaterialTheme.colorScheme.surface
+    Scaffold(
+        containerColor = surface,
+        topBar = {
+            TopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
+                title = { Breadcrumb(c, c.accent) },
+                navigationIcon = { IconButton(onClick = c.onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Zurück") } },
+                actions = {
+                    IconButton(onClick = { c.vm.toggleImportant() }) {
+                        Icon(if (t.important) Icons.Filled.Star else Icons.Outlined.StarOutline, "Wichtig",
+                            tint = if (t.important) Color(0xFFC4314B) else LocalContentColorOrDefault())
+                    }
+                    DetailActions(c, withDelete = true)
+                }
+            )
+        },
+        bottomBar = {
+            Column(Modifier.navigationBarsPadding().imePadding()) {
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                Row(
+                    Modifier.fillMaxWidth().clickable { c.vm.toggleDone() }.padding(14.dp),
+                    horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Filled.Check, null, tint = c.accent, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(if (t.done) "Wieder öffnen" else "Als erledigt markieren", color = c.accent, fontWeight = FontWeight.SemiBold)
+                }
+            }
+        }
+    ) { pad ->
+        Column(Modifier.fillMaxSize().padding(pad).verticalScroll(rememberScrollState()).padding(horizontal = 14.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                CheckCircle(t.done, c.accent, 24.dp) { c.vm.toggleDone() }
+                TitleField(c, MaterialTheme.typography.headlineSmall.copy(color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold), Modifier.weight(1f))
+            }
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.padding(vertical = 6.dp)) {
+                val red = Color(0xFFA3283D); val amber = Color(0xFF8A6100)
+                TabChip(Icons.Outlined.CalendarToday, c.dueLabel ?: "Fällig", if (c.dueLabel == null) null else if (c.overdue) red else c.accent.deepen(), c.pickDue)
+                TabChip(Icons.Outlined.NotificationsNone, c.reminderLabel?.substringBefore(',') ?: "Erinnern", if (c.reminderLabel == null) null else amber, c.pickReminder)
+                TabChip(Icons.Outlined.WbSunny, if (c.inMyDay) "Mein Tag" else "Zu Mein Tag", if (c.inMyDay) c.accent.deepen() else null) { c.vm.toggleMyDay() }
+            }
+            // segmented tab switcher
+            Row(
+                Modifier.fillMaxWidth().padding(vertical = 6.dp).clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)).padding(3.dp)
+            ) {
+                val labels = listOf(
+                    if (n > 0) "Unteraufg. ${c.state.doneChildren}/$n" else "Unteraufgaben",
+                    "Notiz",
+                    if (c.state.attachments.isEmpty()) "Anhänge" else "Anhänge ${c.state.attachments.size}",
+                )
+                labels.forEachIndexed { i, l ->
+                    val sel = tab == i
+                    Box(
+                        Modifier.weight(1f).clip(RoundedCornerShape(10.dp))
+                            .background(if (sel) surface else Color.Transparent)
+                            .clickable { tab = i }.padding(vertical = 8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(l, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal,
+                            color = if (sel) c.accent else MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+            Spacer(Modifier.height(6.dp))
+            when (tab) {
+                0 -> {
+                    if (n > 0) LinearProgressIndicator(
+                        progress = { c.state.doneChildren.toFloat() / n }, color = c.accent, trackColor = c.accent.copy(alpha = 0.15f),
+                        modifier = Modifier.fillMaxWidth().height(5.dp).clip(RoundedCornerShape(3.dp))
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    SubtaskTree(c, guide = true, divided = true)
+                    if (n > 0) HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
+                    AddSubtaskField(c, Modifier.padding(top = 2.dp))
+                }
+                1 -> Surface(shape = RoundedCornerShape(12.dp), color = Color(0xFFFFF8E5), modifier = Modifier.fillMaxWidth()) {
+                    NoteField(c, Modifier.padding(14.dp).heightIn(min = 180.dp), Color(0xFF5C4400), big = true)
+                }
+                else -> AttachmentGrid(c)
+            }
+            CreatedText(c)
+            Spacer(Modifier.height(12.dp))
+        }
+    }
+}
+
+@Composable
+private fun TabChip(icon: ImageVector, text: String, color: Color?, onClick: () -> Unit) {
+    val fg = color ?: MaterialTheme.colorScheme.onSurfaceVariant
+    Row(
+        Modifier.clip(RoundedCornerShape(14.dp))
+            .background(if (color != null) color.copy(alpha = 0.13f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
+            .clickable(onClick = onClick).padding(horizontal = 10.dp, vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(icon, null, tint = fg, modifier = Modifier.size(14.dp))
+        Spacer(Modifier.width(5.dp))
+        Text(text, color = fg, style = MaterialTheme.typography.labelMedium)
+    }
+}
+
+// =====================================================================================
+// 7 · NOTEPAD – ruled paper, serif title, attachments pinned as notes
+// =====================================================================================
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+private fun NotepadDetail(c: DetailCtx) {
+    val t = c.task
+    val paperBg = Color(0xFFFFFCF2)
+    val ink = Color(0xFF2A2A2A)
+    val rule = Color(0xFFEDE6D3)
+    val margin = Color(0xFFE8A0A0)
+    val n = c.state.children.size
+    Scaffold(
+        containerColor = paperBg,
+        topBar = {
+            TopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color.Transparent, navigationIconContentColor = ink, actionIconContentColor = ink
+                ),
+                title = { Breadcrumb(c, c.accent.deepen()) },
+                navigationIcon = { IconButton(onClick = c.onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Zurück") } },
+                actions = {
+                    IconButton(onClick = { c.vm.toggleImportant() }) {
+                        Icon(if (t.important) Icons.Filled.Star else Icons.Outlined.StarOutline, "Wichtig",
+                            tint = if (t.important) Color(0xFFC4314B) else ink)
+                    }
+                    DetailActions(c, withDelete = true)
+                }
+            )
+        }
+    ) { pad ->
+        // the paper always stays light, also in dark mode
+        MaterialTheme(colorScheme = lightColorScheme()) {
+            Column(Modifier.fillMaxSize().padding(pad).imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 12.dp)) {
+                Surface(
+                    shape = RoundedCornerShape(4.dp), color = Color.White, shadowElevation = 2.dp,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        Modifier.drawBehind {
+                            val step = 28.dp.toPx()
+                            var y = step
+                            while (y < size.height) { drawLine(rule, Offset(0f, y), Offset(size.width, y), 1.dp.toPx()); y += step }
+                            val mx = 30.dp.toPx()
+                            drawLine(margin, Offset(mx, 0f), Offset(mx, size.height), 1.5.dp.toPx())
+                        }.padding(start = 38.dp, end = 12.dp, top = 8.dp, bottom = 16.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            CheckCircle(t.done, c.accent, 20.dp) { c.vm.toggleDone() }
+                            TitleField(c, TextStyle(fontFamily = FontFamily.Serif, fontSize = 22.sp, fontWeight = FontWeight.Bold, color = ink), Modifier.weight(1f))
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            PaperLink(c.dueLabel?.let { "fällig $it" } ?: "+ Fälligkeit", if (c.overdue) Color(0xFFC4314B) else c.accent.deepen(), c.pickDue)
+                            Text("  ·  ", color = Color(0xFF999999), fontSize = 12.sp)
+                            PaperLink(c.reminderLabel?.let { "⏰ " + it.substringBefore(',') } ?: "+ Erinnerung", c.accent.deepen(), c.pickReminder)
+                            Text("  ·  ", color = Color(0xFF999999), fontSize = 12.sp)
+                            PaperLink(if (c.inMyDay) "☀ Heute" else "+ Mein Tag", c.accent.deepen()) { c.vm.toggleMyDay() }
+                        }
+                        PaperLabel(if (n > 0) "Zu erledigen · ${c.state.doneChildren}/$n" else "Zu erledigen")
+                        SubtaskTree(c, guide = false)
+                        AddSubtaskField(c, Modifier)
+                        PaperLabel("Notiz")
+                        NoteField(c, Modifier.fillMaxWidth().heightIn(min = 84.dp), Color(0xFF444444), placeholder = "Hier schreiben …", big = true, serif = true)
+                        PaperLabel("Angeheftet")
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier = Modifier.padding(top = 4.dp)
+                        ) {
+                            c.state.attachments.forEachIndexed { i, a ->
+                                Surface(shadowElevation = 2.dp, shape = RoundedCornerShape(4.dp),
+                                    modifier = Modifier.rotate(if (i % 2 == 0) -3f else 2.5f)) {
+                                    Thumb(c, a, Modifier.size(width = 78.dp, height = 62.dp))
+                                }
+                            }
+                            AddTile(c, Modifier.size(width = 78.dp, height = 62.dp))
+                        }
+                        Spacer(Modifier.height(10.dp))
+                        CreatedText(c)
+                    }
+                }
+                Spacer(Modifier.height(24.dp).navigationBarsPadding())
+            }
+        }
+    }
+}
+
+@Composable
+private fun PaperLabel(text: String) {
+    Text(text.uppercase(), fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.6.sp, color = Color(0xFF888888),
+        modifier = Modifier.padding(top = 14.dp, bottom = 2.dp))
+}
+
+@Composable
+private fun PaperLink(text: String, color: Color, onClick: () -> Unit) {
+    Text(text, color = color, fontSize = 12.sp, maxLines = 1,
+        modifier = Modifier.clip(RoundedCornerShape(4.dp)).clickable(onClick = onClick).padding(vertical = 4.dp))
+}

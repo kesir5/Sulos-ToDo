@@ -70,6 +70,11 @@ import androidx.compose.material.icons.outlined.UnfoldLess
 import androidx.compose.material.icons.outlined.UnfoldMore
 import androidx.compose.material.icons.outlined.WbSunny
 import androidx.compose.material.icons.outlined.SwapVert
+import androidx.compose.material.icons.outlined.Print
+import androidx.compose.material.icons.outlined.Dashboard
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.VisibilityOff
+import kotlinx.coroutines.launch
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -212,6 +217,10 @@ fun ListScreen(
     val grouped = !isSmart && style == TaskStyle.GROUPS
     val agenda = !isSmart && style == TaskStyle.AGENDA
     var addDialog by remember { mutableStateOf(autoAdd && style == TaskStyle.CARDS) }
+    var printDialog by remember { mutableStateOf(false) }
+    var designDialog by remember { mutableStateOf(false) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val printScope = androidx.compose.runtime.rememberCoroutineScope()
 
     // ---------- drag & drop by long press
     val lazyState = rememberLazyListState()
@@ -286,9 +295,23 @@ fun ListScreen(
                                 if (allExpanded) "Alle einklappen" else "Alle ausklappen"
                             )
                         }
-                        Box {
-                            IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, "Menü") }
-                            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    }
+                    // show / hide completed tasks
+                    IconButton(onClick = { UiPrefs.setHideDone(context, !hideDone) }) {
+                        Icon(
+                            if (hideDone) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+                            if (hideDone) "Erledigte einblenden" else "Erledigte ausblenden"
+                        )
+                    }
+                    if (!isSmart) IconButton(onClick = { printDialog = true }) { Icon(Icons.Outlined.Print, "Liste drucken") }
+                    Box {
+                        IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, "Menü") }
+                        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                            DropdownMenuItem(
+                                text = { Text("Design der Übersicht") },
+                                leadingIcon = { Icon(Icons.Outlined.Dashboard, null) },
+                                onClick = { menu = false; designDialog = true })
+                            if (!isSmart) {
                                 DropdownMenuItem(
                                     text = { Text("Liste bearbeiten") },
                                     leadingIcon = { Icon(Icons.Outlined.Palette, null) },
@@ -378,6 +401,32 @@ fun ListScreen(
         }
     }
 
+    if (designDialog) StyleDialog(
+        "Design der Aufgabenübersicht", TaskStyle.entries, style, { it.title }, { it.description },
+        onDismiss = { designDialog = false }
+    ) { UiPrefs.setStyle(context, it); designDialog = false }
+    if (printDialog) {
+        var withDone by remember { mutableStateOf(!hideDone) }
+        AlertDialog(
+            onDismissRequest = { printDialog = false },
+            title = { Text("„${h?.title}“ drucken") },
+            text = {
+                Row(Modifier.fillMaxWidth().clickable { withDone = !withDone }, verticalAlignment = Alignment.CenterVertically) {
+                    Text("Erledigte Aufgaben einschließen", modifier = Modifier.weight(1f))
+                    androidx.compose.material3.Switch(checked = withDone, onCheckedChange = { withDone = it })
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    printDialog = false
+                    printScope.launch {
+                        vm.printHtml(withDone)?.let { com.sueleyman.suelostodo.util.TaskPrinter.print(context, it, h?.title ?: "Liste") }
+                    }
+                }) { Text("Drucken") }
+            },
+            dismissButton = { TextButton(onClick = { printDialog = false }) { Text("Abbrechen") } }
+        )
+    }
     if (addDialog) {
         TextInputDialog(
             title = "Neue Aufgabe", confirm = "Hinzufügen",

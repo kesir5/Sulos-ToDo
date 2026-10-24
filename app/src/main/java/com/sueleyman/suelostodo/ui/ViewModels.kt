@@ -271,6 +271,14 @@ class ListViewModel(val listId: String) : ViewModel() {
     /** raw tasks of this list for the sort mode */
     val listTasks: Flow<List<Task>> = if (smart != null) flowOf(emptyList()) else repo.observeTasksOfList(listId)
     fun reorder(ids: List<String>) = viewModelScope.launch { repo.reorder(ids) }
+
+    /** Printable HTML of this list (null for smart lists). */
+    suspend fun printHtml(includeDone: Boolean): String? {
+        if (smart != null) return null
+        val snap = repo.snapshot()
+        val list = snap.lists.firstOrNull { it.id == listId } ?: return null
+        return com.sueleyman.suelostodo.util.TaskPrinter.buildListHtml(list, snap.tasks.filter { it.listId == listId }, includeDone)
+    }
     val groups = repo.observeGroups()
     val groupId = repo.observeList(listId).map { it?.groupId }
     fun moveToGroup(groupId: String?) = viewModelScope.launch { repo.moveListToGroup(listId, groupId) }
@@ -345,4 +353,14 @@ class TaskDetailViewModel(val taskId: String) : ViewModel() {
     fun deleteAttachment(id: String) = viewModelScope.launch { repo.deleteAttachment(id) }
     fun move(target: String) = viewModelScope.launch { repo.moveTask(taskId, target) }
     fun attachmentFile(id: String) = repo.attachmentFile(id)
+
+    /** Printable HTML of this task. */
+    suspend fun printHtml(): String? {
+        val st = state.value
+        val t = st.task ?: return null
+        val all = repo.snapshot().tasks.filter { it.listId == t.listId }
+        return com.sueleyman.suelostodo.util.TaskPrinter.buildTaskHtml(
+            t, listOfNotNull(st.list?.name, st.parent?.title).joinToString(" › "), all, st.attachments.map { it.fileName }
+        )
+    }
 }

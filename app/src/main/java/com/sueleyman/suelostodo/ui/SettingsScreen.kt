@@ -140,35 +140,8 @@ fun SettingsScreen(onBack: () -> Unit, onTransfer: () -> Unit = {}) {
                 label = { Text("Dein Name (Begrüßung „Hi …“ oben)") }, modifier = Modifier.fillMaxWidth()
             )
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
-            Text("Design der Aufgabenübersicht", style = MaterialTheme.typography.titleMedium)
-            val style by UiPrefs.style.collectAsState()
-            TaskStyle.entries.forEach { st ->
-                Row(
-                    Modifier.fillMaxWidth().clickable { UiPrefs.setStyle(context, st) }.padding(vertical = 2.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    RadioButton(selected = style == st, onClick = { UiPrefs.setStyle(context, st) })
-                    Column {
-                        Text(st.title, style = MaterialTheme.typography.bodyLarge)
-                        Text(st.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
-            }
-            HorizontalDivider(Modifier.padding(vertical = 8.dp))
-            Text("Design der Aufgabendetails", style = MaterialTheme.typography.titleMedium)
-            val dStyle by UiPrefs.detailStyle.collectAsState()
-            DetailStyle.entries.forEach { st ->
-                Row(
-                    Modifier.fillMaxWidth().clickable { UiPrefs.setDetailStyle(context, st) }.padding(vertical = 2.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    RadioButton(selected = dStyle == st, onClick = { UiPrefs.setDetailStyle(context, st) })
-                    Column {
-                        Text(st.title, style = MaterialTheme.typography.bodyLarge)
-                        Text(st.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
-            }
+            Text("Das Design der Aufgabenübersicht und der Aufgabendetails stellst du jetzt direkt dort über das ⋮-Menü oben rechts ein.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(
                 "Tipp in der Übersicht: linke Hälfte einer Aufgabe klappt die Unteraufgaben auf/zu, rechte Hälfte öffnet die Details.",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant

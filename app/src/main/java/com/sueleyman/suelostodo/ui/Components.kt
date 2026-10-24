@@ -3,6 +3,7 @@ package com.sueleyman.suelostodo.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -184,3 +185,39 @@ fun formatSize(bytes: Long): String = when {
     bytes < 1024 * 1024 -> "${bytes / 1024} KB"
     else -> String.format(Locale.GERMAN, "%.1f MB", bytes / 1024.0 / 1024.0)
 }
+
+/** Radio-button list of designs, opened from the ⋮ menus of the list and detail screens. */
+@Composable
+fun <T> StyleDialog(
+    title: String, options: List<T>, selected: T,
+    label: (T) -> String, description: (T) -> String,
+    onDismiss: () -> Unit, onSelect: (T) -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            androidx.compose.foundation.layout.Column(
+                Modifier.androidx_verticalScroll()
+            ) {
+                options.forEach { o ->
+                    Row(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable { onSelect(o) }.padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        androidx.compose.material3.RadioButton(selected = o == selected, onClick = { onSelect(o) })
+                        androidx.compose.foundation.layout.Column {
+                            Text(label(o), style = MaterialTheme.typography.bodyLarge)
+                            Text(description(o), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Schließen") } }
+    )
+}
+
+@Composable
+private fun Modifier.androidx_verticalScroll(): Modifier =
+    this.then(Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState()))

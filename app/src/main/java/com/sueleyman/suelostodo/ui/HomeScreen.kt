@@ -225,28 +225,21 @@ fun HomeScreen(
             )
         },
         bottomBar = {
-            Row(Modifier.fillMaxWidth().navigationBarsPadding(), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.fillMaxWidth().navigationBarsPadding()) {
                 Row(
-                    Modifier.weight(1f).clickable { newListIn = "" }.padding(horizontal = 20.dp, vertical = 16.dp),
+                    Modifier.align(Alignment.CenterStart).clickable { newListIn = "" }.padding(horizontal = 20.dp, vertical = 16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(Icons.Filled.Add, null, tint = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.width(16.dp))
                     Text("Neue Liste", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.titleMedium)
                 }
-                // print + show/hide completed tasks
-                IconButton(onClick = { printDialog = true }) {
+                // print – centred in the bar
+                IconButton(onClick = { printDialog = true }, modifier = Modifier.align(Alignment.Center)) {
                     Icon(Icons.Outlined.Print, "Drucken", tint = MaterialTheme.colorScheme.primary)
                 }
-                IconButton(onClick = { UiPrefs.setHideDone(context, !hideDone) }) {
-                    Icon(
-                        if (hideDone) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
-                        if (hideDone) "Erledigte einblenden" else "Erledigte ausblenden",
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                }
                 Row(
-                    Modifier.clickable { newGroupUnder = "" }.padding(start = 8.dp, end = 20.dp, top = 16.dp, bottom = 16.dp),
+                    Modifier.align(Alignment.CenterEnd).clickable { newGroupUnder = "" }.padding(start = 8.dp, end = 20.dp, top = 16.dp, bottom = 16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(Icons.Outlined.CreateNewFolder, null, tint = MaterialTheme.colorScheme.primary)
