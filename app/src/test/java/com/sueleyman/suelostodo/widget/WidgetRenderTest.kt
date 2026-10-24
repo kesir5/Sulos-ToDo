@@ -32,10 +32,12 @@ class WidgetRenderTest {
         org.junit.Assert.assertEquals(listOf("Fallschirm", "Nordlichter"), order())
         WidgetPrefs.setMoving(42, t)
         repo.addTask("inbox", "Einkauf")
+        repo.addTask(l, "Schon erledigt")?.let { repo.toggleDone(it) }
         val data = repo.widgetData()
         val parent = FrameLayout(ctx)
         val sels = WidgetLayout.entries.map { WidgetSel("group:$g", it.key, false) } +
-            WidgetSel("group:$g", "light", true) + WidgetSel("smart:due", "levels", false)
+            WidgetSel("group:$g", "light", true) + WidgetSel("smart:due", "levels", false) +
+            WidgetLayout.entries.map { WidgetSel("group:$g", it.key, false, showDone = true) }
         for (sel in sels) {
             WidgetPrefs.update(ctx, 42) { sel }
             TaskWidget.buildRoot(ctx, 42, data, sel).apply(ctx, parent)

@@ -47,4 +47,21 @@ class WidgetHideDoneParentTest {
         )
         assertEquals(listOf("Offen", "Kind von offen"), visibleOpenTasks(open).map { it.title })
     }
+
+    @Test fun eye_shows_done_tasks_at_the_end() {
+        val data = WidgetData(
+            lists = listOf(TaskList(id = "l", name = "L")),
+            open = listOf(Task(id = "p", listId = "l", title = "Offen")),
+            done = listOf(
+                Task(id = "d", listId = "l", title = "Erledigt", done = true, completedAt = 5),
+                Task(id = "dc", listId = "l", parentId = "p", depth = 1, title = "Erledigtes Kind", done = true),
+                Task(id = "x", listId = "l", parentId = "d", depth = 1, title = "Kind von erledigt", done = true),
+            ),
+            loaded = true,
+        )
+        assertEquals(listOf("Offen"), buildWidgetView("list:l", data).sections.single().rows.map { it.task.title })
+        val v = buildWidgetView("list:l", data, showDone = true)
+        assertEquals(listOf("Offen", "Erledigtes Kind", "Erledigt"), v.sections.single().rows.map { it.task.title })
+        assertEquals(1, v.count)
+    }
 }

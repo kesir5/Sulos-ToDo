@@ -379,11 +379,11 @@ private fun HeroDetail(c: DetailCtx) {
             // ---- rounded hero card with gradient
             Surface(
                 shape = RoundedCornerShape(26.dp), shadowElevation = 6.dp, color = Color.Transparent,
-                modifier = Modifier.fillMaxWidth().statusBarsPaddingCompat().padding(10.dp)
+                modifier = Modifier.fillMaxWidth().padding(start = 10.dp, end = 10.dp, top = 4.dp, bottom = 10.dp)
             ) {
                 Column(
                     Modifier.background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(c.accent, light)))
-                        .padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 16.dp)
+                        .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 14.dp)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         GlassButton(onClick = c.onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Zurück", tint = Color.White, modifier = Modifier.size(20.dp)) }
@@ -409,7 +409,7 @@ private fun HeroDetail(c: DetailCtx) {
                             }
                         }
                     }
-                    Spacer(Modifier.height(14.dp))
+                    Spacer(Modifier.height(8.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         // progress ring of the subtasks (or check circle without subtasks)
                         Box(Modifier.size(52.dp).clip(CircleShape).clickable { c.vm.toggleDone() }, contentAlignment = Alignment.Center) {

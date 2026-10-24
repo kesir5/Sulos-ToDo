@@ -34,6 +34,8 @@ data class WidgetData(
     val groups: List<ListGroup> = emptyList(),
     val open: List<Task> = emptyList(),
     val loaded: Boolean = false,
+    /** completed tasks – only shown when the widget's eye toggle is on */
+    val done: List<Task> = emptyList(),
 )
 
 /** One block of rows; [title] is shown as small section head (group view). */
@@ -45,7 +47,7 @@ data class WidgetView(
     val sections: List<WidgetSection>,
     val addToList: String,
 ) {
-    val count get() = sections.sumOf { s -> s.rows.count { it.task.depth == 0 } }
+    val count get() = sections.sumOf { s -> s.rows.count { it.task.depth == 0 && !it.task.done } }
 }
 
 /** Resolves the selected source into title, colour and rows. Pure function – unit-testable. */
@@ -57,26 +59,39 @@ fun visibleOpenTasks(open: List<Task>): List<Task> {
     val byId = open.associateBy { it.id }
     fun visible(t: Task, guard: Int): Boolean {
         val p = t.parentId ?: return true
-        val parent = byId[p] ?: return false   // parent done or deleted -> hide
-        return guard < 5 && visible(parent, guard + 1)
+        val parent = byId[p] ?: return false   // parent done/missing -> hide
+        return !parent.done && guard < 5 && visible(parent, guard + 1)
     }
     return open.filter { visible(it, 0) }
 }
 
-fun buildWidgetView(source: String, data: WidgetData): WidgetView {
-    val d = data.copy(open = visibleOpenTasks(data.open))
+/**
+ * Rows of one list. Open tasks keep their tree; with [showDone] completed subtasks of open
+ * parents appear in place (struck through) and completed top-level tasks follow at the end.
+ */
+private fun listRows(tasks: List<Task>, showDone: Boolean): List<TreeRow> {
+    if (!showDone) return flattenTree(tasks)
+    val tree = flattenTree(tasks.filter { !(it.done && it.parentId == null) }.sortedBy { it.sortOrder })
+    val doneRoots = tasks.filter { it.done && it.parentId == null }
+        .sortedByDescending { it.completedAt ?: it.updatedAt }
+        .map { TreeRow(it, false, 0, 0) }
+    return tree + doneRoots
+}
+
+fun buildWidgetView(source: String, data: WidgetData, showDone: Boolean = false): WidgetView {
+    val d = data.copy(open = visibleOpenTasks(if (showDone) data.open + data.done else data.open))
     val type = source.substringBefore(':')
     val id = source.substringAfter(':', "")
     val listById = d.lists.associateBy { it.id }
     val today = LocalDate.now().toEpochDay()
     fun listColor(l: TaskList?) = ListColors.argb(l?.color ?: 0)
     fun sectionFor(l: TaskList, title: String?) =
-        WidgetSection(title, listColor(l), flattenTree(d.open.filter { it.listId == l.id }), l.id)
+        WidgetSection(title, listColor(l), listRows(d.open.filter { it.listId == l.id }, showDone), l.id)
 
     return when (type) {
         "group" -> {
             val g = d.groups.firstOrNull { it.id == id }
-            if (g == null) buildWidgetView("list:$INBOX_ID", d) else {
+            if (g == null) buildWidgetView("list:$INBOX_ID", data, showDone) else {
                 val subs = d.groups.filter { it.parentId == g.id }
                 val direct = d.lists.filter { it.groupId == g.id }
                 val color = g.color ?: direct.firstOrNull()?.let { listColor(it) } ?: ListColors.argb(0)
@@ -92,8 +107,10 @@ fun buildWidgetView(source: String, data: WidgetData): WidgetView {
                 "planned" -> Triple("Geplant", 0xFF038387, { t: Task -> t.dueDate != null })
                 else -> Triple("Fällig", 0xFFCA5010, { t: Task -> t.dueDate != null && t.dueDate <= today })
             }
-            val tasks = d.open.filter { it.listId in listById && filter(it) }
-                .sortedWith(compareBy({ it.dueDate ?: Long.MAX_VALUE }, { it.sortOrder }))
+            val tasks = (d.open.filter { !it.done && it.listId in listById && filter(it) }
+                .sortedWith(compareBy({ it.dueDate ?: Long.MAX_VALUE }, { it.sortOrder })) +
+                d.open.filter { it.done && it.listId in listById && filter(it) }
+                    .sortedByDescending { it.completedAt ?: it.updatedAt })
                 .map { TreeRow(it.copy(depth = 0), false, 0, 0) }
             WidgetView(title, color, listOf(WidgetSection(null, color, tasks)), INBOX_ID)
         }

@@ -40,7 +40,7 @@ class Repository(
 
     /** Snapshot for the home-screen widget. */
     suspend fun widgetData() = com.sueleyman.suelostodo.widget.WidgetData(
-        dao.getLists(), dao.getGroups(), dao.getOpenTasks(), loaded = true
+        dao.getLists(), dao.getGroups(), dao.getOpenTasks(), loaded = true, done = dao.getDoneTasks()
     )
     suspend fun getTask(id: String) = dao.getTask(id)
     suspend fun getTasksOfList(listId: String) = dao.getTasksOfList(listId)

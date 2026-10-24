@@ -84,6 +84,10 @@ interface TaskDao {
     @Query("SELECT * FROM tasks WHERE deleted = 0 AND done = 0 ORDER BY sortOrder")
     suspend fun getOpenTasks(): List<Task>
 
+    /** Completed tasks for the widget's eye toggle – newest first, capped. */
+    @Query("SELECT * FROM tasks WHERE deleted = 0 AND done = 1 ORDER BY completedAt DESC LIMIT 400")
+    suspend fun getDoneTasks(): List<Task>
+
     @Query("SELECT * FROM tasks WHERE id = :id")
     fun observeTask(id: String): Flow<Task?>
 

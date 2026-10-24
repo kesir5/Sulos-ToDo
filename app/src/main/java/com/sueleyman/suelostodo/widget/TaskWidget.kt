@@ -32,6 +32,7 @@ import java.time.LocalDate
 
 private const val ACTION_PICKER = "com.sueleyman.suelostodo.widget.PICKER"
 private const val ACTION_LAYOUT = "com.sueleyman.suelostodo.widget.LAYOUT"
+private const val ACTION_EYE = "com.sueleyman.suelostodo.widget.EYE"
 private const val EXTRA_LAYOUT = "layout"
 internal const val EXTRA_OP = "op"
 internal const val EXTRA_TASK = "task"
@@ -120,7 +121,7 @@ object TaskWidget {
 
     /** Builds the outer widget (background, header, counters, chips, list adapter). */
     fun buildRoot(c: Context, id: Int, data: WidgetData, sel: WidgetSel): RemoteViews {
-        val v = buildWidgetView(sel.source, data)
+        val v = buildWidgetView(sel.source, data, sel.showDone)
         val layout = WidgetLayout.of(sel.layout)
         val rv = RemoteViews(c.packageName, R.layout.widget_root)
         val accent = v.color
@@ -167,6 +168,13 @@ object TaskWidget {
         rv.setOnClickPendingIntent(R.id.w_title_box, broadcast(c, id, ACTION_PICKER, 1))
         rv.setInt(R.id.w_add_bg, "setColorFilter", plusBg)
         rv.setInt(R.id.w_add_icon, "setColorFilter", plusFg)
+        // eye: show / hide completed tasks (hidden while the picker is open)
+        rv.setViewVisibility(R.id.w_eye, if (sel.picker) View.GONE else View.VISIBLE)
+        rv.setInt(R.id.w_eye_bg, "setColorFilter", plusBg)
+        rv.setInt(R.id.w_eye_icon, "setColorFilter", plusFg)
+        rv.setImageViewResource(R.id.w_eye_icon, if (sel.showDone) R.drawable.ic_eye else R.drawable.ic_eye_off)
+        rv.setContentDescription(R.id.w_eye_icon, if (sel.showDone) "Erledigte ausblenden" else "Erledigte einblenden")
+        rv.setOnClickPendingIntent(R.id.w_eye, broadcast(c, id, ACTION_EYE, 5))
         if (sel.picker) {
             rv.setImageViewResource(R.id.w_add_icon, R.drawable.ic_close_w)
             rv.setOnClickPendingIntent(R.id.w_add, broadcast(c, id, ACTION_PICKER, 2))
@@ -271,7 +279,7 @@ fun widgetItems(sel: WidgetSel, d: WidgetData): List<WItem> {
         add(WItem.Head("Listen"))
         d.lists.forEach { add(WItem.Option("list:${it.id}", it.name, ListColors.argb(it.color), 0, sel.source == "list:${it.id}")) }
     }
-    val v = buildWidgetView(sel.source, d)
+    val v = buildWidgetView(sel.source, d, sel.showDone)
     return when (WidgetLayout.of(sel.layout)) {
         else -> v.sections.flatMap { s ->
             (if (s.title != null) listOf(WItem.Section(s.title, s.color, s.listId)) else emptyList()) + s.rows.map { WItem.Row(it, s.color, false) }
@@ -355,12 +363,17 @@ class WidgetFactory(private val c: Context, private val widgetId: Int) : RemoteV
                 val accent = it.color.toInt()
                 val sub = t.depth > 0
                 val title = t.title + if (it.row.hasChildren && !t.expanded) "  (+${it.row.childCount})" else ""
-                if (layout == WidgetLayout.LEVELS && !sub)
+                if (t.done)
+                    setTextViewText(R.id.i_title, android.text.SpannableString(title).apply {
+                        setSpan(android.text.style.StrikethroughSpan(), 0, length, 0)
+                    })
+                else if (layout == WidgetLayout.LEVELS && !sub)
                     setTextViewText(R.id.i_title, android.text.SpannableString(title).apply {
                         setSpan(android.text.style.StyleSpan(android.graphics.Typeface.BOLD), 0, length, 0)
                     })
                 else setTextViewText(R.id.i_title, title)
-                setTextColor(R.id.i_title, if (dark) (if (sub) DIM else WHITE) else (if (sub) INK2 else INK))
+                setTextColor(R.id.i_title, if (t.done) (if (dark) DIM else INK2) else if (dark) (if (sub) DIM else WHITE) else (if (sub) INK2 else INK))
+                setImageViewResource(R.id.i_check, if (t.done) R.drawable.ic_check_circle else R.drawable.ic_circle)
                 setInt(R.id.i_title, "setMaxLines", if (it.single) 1 else 2)
                 setTextViewTextSize(R.id.i_title, android.util.TypedValue.COMPLEX_UNIT_SP, (if (it.single) 13f else 14f) * fs)
                 setTextViewTextSize(R.id.i_due, android.util.TypedValue.COMPLEX_UNIT_SP, 11f * fs)
@@ -369,7 +382,7 @@ class WidgetFactory(private val c: Context, private val widgetId: Int) : RemoteV
                 setViewVisibility(R.id.i_star, if (t.important) View.VISIBLE else View.GONE)
                 val showDue = layout in setOf(WidgetLayout.LIGHT, WidgetLayout.LINES, WidgetLayout.ZEBRA,
                     WidgetLayout.TILES, WidgetLayout.COLOR_LINES, WidgetLayout.LEVELS)
-                val due = if (showDue) dueLabel(t) else null
+                val due = if (showDue && !t.done) dueLabel(t) else null
                 setViewVisibility(R.id.i_due, if (due != null) View.VISIBLE else View.GONE)
                 due?.let { (txt, hot) ->
                     setTextViewText(R.id.i_due, txt)
@@ -411,7 +424,7 @@ class WidgetFactory(private val c: Context, private val widgetId: Int) : RemoteV
                     else -> {}
                 }
                 // ---- move mode via the handle at the right edge (widgets cannot do real drag & drop)
-                val canMove = sel.source.startsWith("list:") || sel.source.startsWith("group:")
+                val canMove = !t.done && (sel.source.startsWith("list:") || sel.source.startsWith("group:"))
                 val moving = canMove && WidgetPrefs.movingTask(widgetId) == t.id
                 val handleTint = if (dark) WHITE else INK2
                 setViewVisibility(R.id.i_handle, if (canMove) View.VISIBLE else View.GONE)
@@ -462,6 +475,10 @@ class TaskWidgetReceiver : AppWidgetProvider() {
             ACTION_PICKER -> {
                 WidgetPrefs.update(context, id) { it.copy(picker = !it.picker) }
                 if (WidgetPrefs.get(context, id).picker) TaskWidget.schedulePickerTimeout(context, id)
+                redraw(context, id)
+            }
+            ACTION_EYE -> {
+                WidgetPrefs.update(context, id) { it.copy(showDone = !it.showDone) }
                 redraw(context, id)
             }
             ACTION_LAYOUT -> {

@@ -12,6 +12,8 @@ data class WidgetSel(
     val source: String = "list:$INBOX_ID",
     val layout: String = WidgetLayout.COLOR.key,
     val picker: Boolean = false,
+    /** eye icon in the header: also show completed tasks */
+    val showDone: Boolean = false,
 )
 
 /**
@@ -42,6 +44,7 @@ object WidgetPrefs {
             source = p.getString("src_$id", null) ?: "list:$INBOX_ID",
             layout = p.getString("lay_$id", null) ?: WidgetLayout.COLOR.key,
             picker = p.getBoolean("pick_$id", false),
+            showDone = p.getBoolean("done_$id", false),
         )
         state.value = state.value + (id to sel)
         return sel
@@ -53,13 +56,13 @@ object WidgetPrefs {
     }
 
     fun remove(c: Context, id: Int) {
-        sp(c).edit().remove("src_$id").remove("lay_$id").remove("pick_$id").apply()
+        sp(c).edit().remove("src_$id").remove("lay_$id").remove("pick_$id").remove("done_$id").apply()
         state.value = state.value - id
     }
 
     fun update(c: Context, id: Int, change: (WidgetSel) -> WidgetSel) {
         val new = change(get(c, id))
-        sp(c).edit().putString("src_$id", new.source).putString("lay_$id", new.layout).putBoolean("pick_$id", new.picker).apply()
+        sp(c).edit().putString("src_$id", new.source).putString("lay_$id", new.layout).putBoolean("pick_$id", new.picker).putBoolean("done_$id", new.showDone).apply()
         state.value = state.value + (id to new)
     }
 }
