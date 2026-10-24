@@ -14,10 +14,9 @@ enum class TaskStyle(val title: String, val description: String) {
 
 enum class DetailStyle(val title: String, val description: String) {
     HERO("1 · Hero-Header", "Farbiger Kopf mit Status-Chips, Inhalte als Karten"),
-    TILES("2 · Kachel-Dashboard", "Eigenschaften als Kacheln, Fortschrittsring"),
-    DOCUMENT("3 · Dokument", "Eigenschaften-Tabelle, Notiz als Fließtext"),
-    ACTIONBAR("4 · Aktionsleiste", "Schalterleiste unter dem Titel, Abschnitte durch Linien getrennt"),
-    SHEET("5 · Aufklappbare Abschnitte", "Farbiger Kopf, weißes Blatt mit auf-/zuklappbaren Abschnitten"),
+    DOCUMENT("2 · Dokument", "Eigenschaften-Tabelle, Notiz als Fließtext"),
+    ACTIONBAR("3 · Aktionsleiste", "Schalterleiste unter dem Titel, Abschnitte durch Linien getrennt"),
+    SHEET("4 · Aufklappbare Abschnitte", "Farbiger Kopf, weißes Blatt mit auf-/zuklappbaren Abschnitten"),
 }
 
 enum class HomeStyle(val title: String, val description: String) {
@@ -31,6 +30,14 @@ enum class HomeStyle(val title: String, val description: String) {
 }
 
 object UiPrefs {
+    private val _hideDone = MutableStateFlow(false)
+    /** Eye icon on the start page: hide completed tasks everywhere in the lists. */
+    val hideDone: StateFlow<Boolean> = _hideDone
+    fun setHideDone(c: Context, v: Boolean) {
+        c.getSharedPreferences("ui", Context.MODE_PRIVATE).edit().putBoolean("hideDone", v).apply()
+        _hideDone.value = v
+    }
+
     private val _home = MutableStateFlow(HomeStyle.BANDS)
     val homeStyle: StateFlow<HomeStyle> = _home
     private val _name = MutableStateFlow("")
@@ -66,6 +73,7 @@ object UiPrefs {
         val h = c.getSharedPreferences("ui", Context.MODE_PRIVATE).getString("home", null)
         _home.value = HomeStyle.entries.firstOrNull { it.name == h } ?: HomeStyle.BANDS
         _name.value = c.getSharedPreferences("ui", Context.MODE_PRIVATE).getString("name", "") ?: ""
+        _hideDone.value = c.getSharedPreferences("ui", Context.MODE_PRIVATE).getBoolean("hideDone", false)
     }
 
     fun setStyle(c: Context, s: TaskStyle) {

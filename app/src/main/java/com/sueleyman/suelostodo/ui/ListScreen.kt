@@ -220,7 +220,14 @@ fun ListScreen(
     var moved by remember { mutableStateOf(false) }
     var dragRows by remember { mutableStateOf(state.openRows) }
     var dragGroups by remember { mutableStateOf(state.openGroups) }
-    LaunchedEffect(state.openRows) { if (draggingId == null) { dragRows = state.openRows; dragGroups = state.openGroups } }
+    val hideDone by UiPrefs.hideDone.collectAsState()
+    LaunchedEffect(state.openRows, hideDone) {
+        if (draggingId == null) {
+            // eye icon: hide completed subtasks inside open tasks as well
+            dragRows = if (hideDone) state.openRows.filter { !it.task.done } else state.openRows
+            dragGroups = if (hideDone) state.openGroups.map { g -> g.filter { !it.task.done } } else state.openGroups
+        }
+    }
     val reorderState = rememberReorderableLazyListState(lazyState) { from, to ->
         val fk = from.key as? String ?: return@rememberReorderableLazyListState
         val tk = to.key as? String ?: return@rememberReorderableLazyListState
@@ -356,7 +363,7 @@ fun ListScreen(
                 }
             }
 
-            if (state.doneCount > 0) {
+            if (state.doneCount > 0 && !hideDone) {
                 item(key = "doneHeader") {
                     DoneHeader(state.doneCount, showDone, accent, colored) { showDone = !showDone }
                 }

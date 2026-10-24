@@ -164,6 +164,14 @@ class HomeViewModel : ViewModel() {
     fun renameGroup(id: String, name: String) = viewModelScope.launch { repo.renameGroup(id, name) }
     fun dissolveGroup(id: String) = viewModelScope.launch { repo.dissolveGroup(id) }
     fun toggleDone(taskId: String) = viewModelScope.launch { repo.toggleDone(taskId) }
+
+    /** Builds the printable HTML for the chosen groups. */
+    suspend fun printHtml(sel: com.sueleyman.suelostodo.util.PrintSelection): String {
+        val snap = repo.snapshot()
+        return com.sueleyman.suelostodo.util.TaskPrinter.buildHtml(
+            snap.lists.filter { !it.deleted }, snap.groups.filter { !it.deleted }, snap.tasks, sel
+        )
+    }
     /** Collapses all groups if every group is open, otherwise opens all. */
     fun toggleAllGroups() = viewModelScope.launch {
         val g = state.value.groups

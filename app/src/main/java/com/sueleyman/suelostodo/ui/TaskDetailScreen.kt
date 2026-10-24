@@ -230,7 +230,6 @@ fun TaskDetailScreen(taskId: String, onBack: () -> Unit, onOpenTask: (String) ->
 
     when (style) {
         DetailStyle.HERO -> HeroDetail(ctx)
-        DetailStyle.TILES -> TilesDetail(ctx)
         DetailStyle.DOCUMENT -> DocumentDetail(ctx)
         DetailStyle.ACTIONBAR -> ActionBarDetail(ctx)
         DetailStyle.SHEET -> SheetDetail(ctx)
@@ -454,119 +453,6 @@ private fun HeroChip(icon: ImageVector, text: String, active: Boolean, accent: C
 private fun HeroCard(content: @Composable () -> Unit) {
     Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surface, shadowElevation = 1.dp, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) { content() }
-    }
-}
-
-// =====================================================================================
-// 2 · TILES
-// =====================================================================================
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun TilesDetail(c: DetailCtx) {
-    val t = c.task
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            TopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
-                title = {},
-                navigationIcon = { IconButton(onClick = c.onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Zurück") } },
-                actions = { DetailActions(c, withDelete = true) }
-            )
-        }
-    ) { pad ->
-        Column(
-            Modifier.fillMaxSize().padding(pad).imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Column {
-                Breadcrumb(c, c.accent)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    CheckCircle(t.done, c.accent, 24.dp) { c.vm.toggleDone() }
-                    TitleField(c, MaterialTheme.typography.headlineSmall.copy(color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.SemiBold), Modifier.weight(1f))
-                }
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Tile(Icons.Outlined.CalendarToday, c.dueLabel ?: "–", "Fällig", c.dueLabel != null,
-                    if (c.overdue) MaterialTheme.colorScheme.error else c.accent, Modifier.weight(1f), c.pickDue)
-                Tile(Icons.Outlined.NotificationsNone, c.reminderLabel ?: "–", "Erinnerung", c.reminderLabel != null,
-                    c.accent, Modifier.weight(1f), c.pickReminder)
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Tile(Icons.Outlined.WbSunny, if (c.inMyDay) "Heute" else "Nein", "Mein Tag", c.inMyDay, c.accent, Modifier.weight(1f)) { c.vm.toggleMyDay() }
-                Tile(if (t.important) Icons.Filled.Star else Icons.Outlined.StarOutline, if (t.important) "Ja" else "Nein", "Wichtig",
-                    t.important, c.accent, Modifier.weight(1f)) { c.vm.toggleImportant() }
-            }
-            Surface(
-                shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.surface,
-                border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant), modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(Modifier.padding(14.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        val n = c.state.children.size
-                        ProgressRing(if (n == 0) 0f else c.state.doneChildren.toFloat() / n, c.accent, 36.dp)
-                        Spacer(Modifier.width(12.dp))
-                        Column {
-                            Text("Unteraufgaben", style = MaterialTheme.typography.titleSmall)
-                            Text(if (n == 0) "Noch keine" else "${c.state.doneChildren} von $n erledigt",
-                                style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-                    Spacer(Modifier.height(6.dp))
-                    SubtaskTree(c, guide = true)
-                    AddSubtaskField(c, Modifier.padding(top = 4.dp))
-                }
-            }
-            Surface(
-                shape = RoundedCornerShape(14.dp),
-                color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.6f),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(Modifier.padding(14.dp)) {
-                    Icon(Icons.AutoMirrored.Outlined.StickyNote2, null, tint = MaterialTheme.colorScheme.onTertiaryContainer, modifier = Modifier.size(20.dp))
-                    Spacer(Modifier.width(10.dp))
-                    NoteField(c, Modifier.weight(1f).heightIn(min = 72.dp), MaterialTheme.colorScheme.onTertiaryContainer)
-                }
-            }
-            Text("Anhänge", style = MaterialTheme.typography.titleSmall)
-            AttachmentStrip(c)
-            CreatedText(c)
-            Spacer(Modifier.height(24.dp).navigationBarsPadding())
-        }
-    }
-}
-
-@Composable
-private fun Tile(
-    icon: ImageVector, value: String, label: String, active: Boolean, accent: Color,
-    modifier: Modifier, onClick: () -> Unit,
-) {
-    val surface = MaterialTheme.colorScheme.surface
-    Surface(
-        shape = RoundedCornerShape(14.dp),
-        color = if (active) accent.copy(alpha = 0.13f).compositeOver(surface) else surface,
-        border = if (active) null else BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
-        modifier = modifier.clip(RoundedCornerShape(14.dp)).clickable(onClick = onClick)
-    ) {
-        Column(Modifier.padding(12.dp)) {
-            Icon(icon, null, tint = if (active) accent else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(22.dp))
-            Spacer(Modifier.height(8.dp))
-            Text(value, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                color = if (active) accent else MaterialTheme.colorScheme.onSurface)
-            Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-    }
-}
-
-@Composable
-private fun ProgressRing(frac: Float, color: Color, size: Dp) {
-    Canvas(Modifier.size(size)) {
-        val sw = 4.dp.toPx()
-        val d = this.size.minDimension - sw
-        val tl = Offset(sw / 2, sw / 2)
-        drawArc(color.copy(alpha = 0.15f), 0f, 360f, false, tl, Size(d, d), style = Stroke(sw))
-        drawArc(color, -90f, 360f * frac, false, tl, Size(d, d), style = Stroke(sw))
     }
 }
 

@@ -41,6 +41,8 @@ import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.CreateNewFolder
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.outlined.FolderOff
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.Home
@@ -48,6 +50,10 @@ import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.StarOutline
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.SwapVert
+import androidx.compose.material.icons.outlined.Print
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.VisibilityOff
+import kotlinx.coroutines.launch
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.UnfoldLess
 import androidx.compose.material.icons.outlined.UnfoldMore
@@ -161,6 +167,10 @@ fun HomeScreen(
     var moveList by remember { mutableStateOf<ListWithCount?>(null) }
     var newGroupFor by remember { mutableStateOf<ListWithCount?>(null) }
     var colorFor by remember { mutableStateOf<ListGroup?>(null) }
+    var printDialog by remember { mutableStateOf(false) }
+    val hideDone by UiPrefs.hideDone.collectAsState()
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val printScope = androidx.compose.runtime.rememberCoroutineScope()
 
     val actions = HomeActions(
         arrange = onArrange,
@@ -224,8 +234,19 @@ fun HomeScreen(
                     Spacer(Modifier.width(16.dp))
                     Text("Neue Liste", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.titleMedium)
                 }
+                // print + show/hide completed tasks
+                IconButton(onClick = { printDialog = true }) {
+                    Icon(Icons.Outlined.Print, "Drucken", tint = MaterialTheme.colorScheme.primary)
+                }
+                IconButton(onClick = { UiPrefs.setHideDone(context, !hideDone) }) {
+                    Icon(
+                        if (hideDone) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+                        if (hideDone) "Erledigte einblenden" else "Erledigte ausblenden",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
                 Row(
-                    Modifier.clickable { newGroupUnder = "" }.padding(horizontal = 20.dp, vertical = 16.dp),
+                    Modifier.clickable { newGroupUnder = "" }.padding(start = 8.dp, end = 20.dp, top = 16.dp, bottom = 16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(Icons.Outlined.CreateNewFolder, null, tint = MaterialTheme.colorScheme.primary)
@@ -299,6 +320,15 @@ fun HomeScreen(
             onDismiss = { newGroupUnder = null },
             onCreate = { name, p -> newGroupUnder = null; vm.createGroup(name, p) }
         )
+    }
+    if (printDialog) {
+        PrintDialog(state.groups, onDismiss = { printDialog = false }) { sel ->
+            printDialog = false
+            printScope.launch {
+                val html = vm.printHtml(sel)
+                com.sueleyman.suelostodo.util.TaskPrinter.print(context, html)
+            }
+        }
     }
     colorFor?.let { g ->
         GroupColorDialog(
@@ -1031,4 +1061,57 @@ private fun NavRow(icon: ImageVector, tint: Color, title: String, count: Int?, o
             Text(count.toString(), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
+}
+
+
+/** Print dialog: choose groups (and lists without group), optionally include completed tasks. */
+@Composable
+private fun PrintDialog(groups: List<ListGroup>, onDismiss: () -> Unit, onPrint: (com.sueleyman.suelostodo.util.PrintSelection) -> Unit) {
+    val ordered = orderedGroups(groups)
+    var chosen by remember { mutableStateOf(groups.map { it.id }.toSet()) }
+    var loose by remember { mutableStateOf(true) }
+    var withDone by remember { mutableStateOf(false) }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Drucken") },
+        text = {
+            Column(Modifier.heightIn(max = 460.dp).verticalScroll(androidx.compose.foundation.rememberScrollState())) {
+                Text("Gruppen", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
+                if (ordered.isEmpty()) Text("Noch keine Gruppen vorhanden.", style = MaterialTheme.typography.bodySmall)
+                ordered.forEach { (g, d) ->
+                    Row(
+                        Modifier.fillMaxWidth().clickable {
+                            chosen = if (g.id in chosen) chosen - g.id else chosen + g.id
+                        }.padding(start = (d * 24).dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        androidx.compose.material3.Checkbox(checked = g.id in chosen, onCheckedChange = null, modifier = Modifier.padding(10.dp))
+                        Icon(Icons.Outlined.Folder, null, modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(Modifier.width(6.dp))
+                        Text(g.name)
+                    }
+                }
+                Row(Modifier.fillMaxWidth().clickable { loose = !loose }, verticalAlignment = Alignment.CenterVertically) {
+                    androidx.compose.material3.Checkbox(checked = loose, onCheckedChange = null, modifier = Modifier.padding(10.dp))
+                    Text("Listen ohne Gruppe (inkl. „Aufgaben“)")
+                }
+                HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                Row(Modifier.fillMaxWidth().clickable { withDone = !withDone }, verticalAlignment = Alignment.CenterVertically) {
+                    Text("Erledigte Aufgaben einschließen", modifier = Modifier.weight(1f))
+                    androidx.compose.material3.Switch(checked = withDone, onCheckedChange = { withDone = it })
+                }
+                Text(
+                    "Im nächsten Schritt öffnet sich der Android-Druckdialog – dort Drucker oder „Als PDF speichern“ wählen.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
+        confirmButton = {
+            androidx.compose.material3.TextButton(
+                enabled = chosen.isNotEmpty() || loose,
+                onClick = { onPrint(com.sueleyman.suelostodo.util.PrintSelection(chosen, loose, withDone)) }
+            ) { Text("Drucken") }
+        },
+        dismissButton = { androidx.compose.material3.TextButton(onClick = onDismiss) { Text("Abbrechen") } }
+    )
 }
