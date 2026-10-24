@@ -162,6 +162,7 @@ fun ListScreen(
     onBack: () -> Unit,
     onOpenTask: (String) -> Unit,
     onExport: () -> Unit = {},
+    onCalendar: () -> Unit = {},
 ) {
     val vm: ListViewModel = viewModel(key = "list-$listId") { ListViewModel(listId) }
     val state by vm.state.collectAsStateWithLifecycle()
@@ -320,6 +321,10 @@ fun ListScreen(
                                     text = { Text("In Gruppe verschieben") },
                                     leadingIcon = { Icon(Icons.Outlined.Folder, null) },
                                     onClick = { menu = false; groupDialog = true })
+                                DropdownMenuItem(
+                                    text = { Text("Termine aus Google Kalender") },
+                                    leadingIcon = { Icon(Icons.Outlined.CalendarToday, null) },
+                                    onClick = { menu = false; onCalendar() })
                                 DropdownMenuItem(
                                     text = { Text("Importieren / Exportieren") },
                                     leadingIcon = { Icon(Icons.Outlined.FileDownload, null) },

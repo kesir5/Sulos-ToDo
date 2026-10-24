@@ -77,6 +77,18 @@
             android:contentDescription="Nach unten" />
 
         <ImageView
+            android:id="@+id/i_fold"
+            android:layout_width="30dp"
+            android:layout_height="34dp"
+            android:paddingStart="6dp"
+            android:paddingEnd="2dp"
+            android:paddingTop="8dp"
+            android:paddingBottom="8dp"
+            android:src="@drawable/ic_add"
+            android:visibility="gone"
+            android:contentDescription="Auf-/Zuklappen" />
+
+        <ImageView
             android:id="@+id/i_handle"
             android:layout_width="30dp"
             android:layout_height="34dp"

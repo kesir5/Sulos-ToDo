@@ -182,6 +182,33 @@ class Repository(
         return t.id
     }
 
+    /**
+     * Creates one task per calendar appointment (on top of [listId]): due date = day of the
+     * appointment, note = time / place / description, optional reminder at the start time.
+     */
+    suspend fun importCalendarEvents(
+        listId: String, events: List<com.sueleyman.suelostodo.io.CalEvent>, remind: Boolean,
+    ): Int {
+        val minOrder = dao.getTasksOfList(listId).filter { it.parentId == null }.minOfOrNull { it.sortOrder }
+            ?: System.currentTimeMillis()
+        val nowMs = now()
+        // keep the chronological order: earliest appointment on top
+        events.forEachIndexed { i, e ->
+            val t = Task(
+                listId = listId, title = e.title.trim(), note = e.toNote(), dueDate = e.day,
+                reminderAt = if (remind && e.start != null && e.start > nowMs) e.start
+                    else if (remind && e.allDay) java.time.LocalDate.ofEpochDay(e.day).atTime(8, 0)
+                        .atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli().takeIf { it > nowMs }
+                    else null,
+                sortOrder = minOrder - 1000L * (events.size - i),
+            )
+            dao.upsertTask(t)
+            ReminderScheduler.schedule(context, t)
+        }
+        changed()
+        return events.size
+    }
+
     suspend fun updateTask(task: Task) {
         val updated = task.copy(updatedAt = now())
         dao.upsertTask(updated)

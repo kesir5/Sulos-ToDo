@@ -93,7 +93,8 @@ class MainActivity : ComponentActivity() {
                             autoAdd = e.arguments?.getBoolean("add") == true,
                             onBack = { if (!nav.popBackStack()) finish() },
                             onOpenTask = { nav.navigate("task/$it") },
-                            onExport = { nav.navigate("transfer?list=${e.arguments?.getString("id")}") }
+                            onExport = { nav.navigate("transfer?list=${e.arguments?.getString("id")}") },
+                            onCalendar = { nav.navigate("calendar?list=${e.arguments?.getString("id")}") }
                         )
                     }
                     composable(
@@ -109,9 +110,16 @@ class MainActivity : ComponentActivity() {
                             onOpenTask = { nav.navigate("task/$it") }
                         )
                     }
+                    composable(
+                        "calendar?list={list}",
+                        arguments = listOf(navArgument("list") { type = NavType.StringType; nullable = true; defaultValue = null })
+                    ) { e ->
+                        com.sueleyman.suelostodo.ui.CalendarImportScreen(initialList = e.arguments?.getString("list"), onBack = { nav.popBackStack() })
+                    }
                     composable("arrange") { ArrangeScreen(onBack = { nav.popBackStack() }) }
                     composable("settings") {
-                        SettingsScreen(onBack = { nav.popBackStack() }, onTransfer = { nav.navigate("transfer") })
+                        SettingsScreen(onBack = { nav.popBackStack() }, onTransfer = { nav.navigate("transfer") },
+                            onCalendar = { nav.navigate("calendar") })
                     }
                 }
             }

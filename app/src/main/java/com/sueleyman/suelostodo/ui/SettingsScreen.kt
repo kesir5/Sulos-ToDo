@@ -66,7 +66,7 @@ import java.util.Date
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(onBack: () -> Unit, onTransfer: () -> Unit = {}) {
+fun SettingsScreen(onBack: () -> Unit, onTransfer: () -> Unit = {}, onCalendar: () -> Unit = {}) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val status by SyncState.status.collectAsState()
@@ -153,6 +153,7 @@ fun SettingsScreen(onBack: () -> Unit, onTransfer: () -> Unit = {}) {
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             OutlinedButton(onClick = onTransfer, modifier = Modifier.fillMaxWidth()) { Text("Import & Export öffnen") }
+            OutlinedButton(onClick = onCalendar, modifier = Modifier.fillMaxWidth()) { Text("Termine aus Google Kalender importieren") }
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
             Text("Google-Drive-Synchronisation", style = MaterialTheme.typography.titleMedium)
             Text(

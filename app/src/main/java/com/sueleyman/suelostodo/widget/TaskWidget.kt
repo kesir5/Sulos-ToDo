@@ -37,6 +37,7 @@ private const val EXTRA_LAYOUT = "layout"
 internal const val EXTRA_OP = "op"
 internal const val EXTRA_TASK = "task"
 internal const val EXTRA_SOURCE = "source"
+internal const val EXTRA_EXPAND = "expand"
 
 private const val INK = 0xFF1F1F1F.toInt()
 private const val INK2 = 0xFF6B6B6B.toInt()
@@ -127,13 +128,15 @@ object TaskWidget {
         val accent = v.color
 
         // ---------- colours per layout
+        // Header button backgrounds must be OPAQUE: ImageView.setColorFilter ignores the alpha of a
+        // translucent tint, so 0x33FFFFFF turned the circles solid white and hid the white icons.
         val bg: Int; val titleColor: Int; val subColor: Int; val plusBg: Int; val plusFg: Int; var headBg = false
         when {
             sel.picker -> { bg = WHITE; titleColor = INK; subColor = INK2; plusBg = 0xFFF1F0EC.toInt(); plusFg = INK }
-            layout.dark -> { bg = accent.toInt(); titleColor = WHITE; subColor = DIM; plusBg = 0x33FFFFFF; plusFg = WHITE }
-            layout == WidgetLayout.LIGHT || layout == WidgetLayout.ZEBRA -> { bg = WHITE; titleColor = WHITE; subColor = DIM; plusBg = 0x33FFFFFF; plusFg = WHITE; headBg = true }
+            layout.dark -> { bg = accent.toInt(); titleColor = WHITE; subColor = DIM; plusBg = blend(accent.toInt(), WHITE, 0x40); plusFg = WHITE }
+            layout == WidgetLayout.LIGHT || layout == WidgetLayout.ZEBRA -> { bg = WHITE; titleColor = WHITE; subColor = DIM; plusBg = blend(accent.toInt(), WHITE, 0x40); plusFg = WHITE; headBg = true }
             layout == WidgetLayout.LINES || layout == WidgetLayout.LEVELS ->
-                { bg = WHITE; titleColor = INK; subColor = INK2; plusBg = (0x2E000000L or (accent and 0xFFFFFF)).toInt(); plusFg = deep(accent) }
+                { bg = WHITE; titleColor = INK; subColor = INK2; plusBg = blend(WHITE, accent.toInt(), 0x2E); plusFg = deep(accent) }
             layout == WidgetLayout.TILES -> { bg = 0xFFF1ECE8.toInt(); titleColor = deep(accent); subColor = INK2; plusBg = accent.toInt(); plusFg = WHITE }
             else -> { bg = 0xFFFBF8F6.toInt(); titleColor = deep(accent); subColor = INK2; plusBg = accent.toInt(); plusFg = WHITE }
         }
@@ -443,6 +446,16 @@ class WidgetFactory(private val c: Context, private val widgetId: Int) : RemoteV
                     setOnClickFillInIntent(R.id.i_down, Intent().putExtra(EXTRA_OP, "move_down").putExtra(EXTRA_TASK, t.id))
                     setInt(R.id.i_row, "setBackgroundColor", if (dark) 0x33FFFFFF else blend(WHITE, accent, 0x30))
                 }
+                // ---- expand / collapse subtasks (left of the move handle)
+                val foldable = it.row.hasChildren && !moving
+                setViewVisibility(R.id.i_fold, if (foldable) View.VISIBLE else View.GONE)
+                if (foldable) {
+                    setImageViewResource(R.id.i_fold, if (t.expanded) R.drawable.ic_minus else R.drawable.ic_add)
+                    setInt(R.id.i_fold, "setColorFilter", if (dark) WHITE else accent)
+                    setContentDescription(R.id.i_fold, if (t.expanded) "Zuklappen" else "Aufklappen")
+                    setOnClickFillInIntent(R.id.i_fold, Intent().putExtra(EXTRA_OP, "fold").putExtra(EXTRA_TASK, t.id)
+                        .putExtra(EXTRA_EXPAND, !t.expanded))
+                }
                 setOnClickFillInIntent(R.id.i_check, Intent().putExtra(EXTRA_OP, "toggle").putExtra(EXTRA_TASK, t.id))
                 setOnClickFillInIntent(R.id.i_title, Intent().putExtra(EXTRA_OP, "open").putExtra(EXTRA_TASK, t.id))
             }
@@ -513,6 +526,10 @@ class WidgetActionActivity : Activity() {
                 WidgetPrefs.update(app, id) { it.copy(layout = l) }
                 app.appScope.launch { runCatching { TaskWidget.update(app, id) } }
                 TaskWidget.schedulePickerTimeout(app, id)
+            }
+            "fold" -> intent.getStringExtra(EXTRA_TASK)?.let { t ->
+                val expand = intent.getBooleanExtra(EXTRA_EXPAND, true)
+                app.appScope.launch { runCatching { app.repo.setExpanded(t, expand); TaskWidget.update(app, id) } }
             }
             "move_start" -> intent.getStringExtra(EXTRA_TASK)?.let { t ->
                 WidgetPrefs.setMoving(id, t)
