@@ -132,6 +132,13 @@ class MainActivity : ComponentActivity() {
         (application as SuelosToDoApp).appScope.launch {
             runCatching { com.sueleyman.suelostodo.widget.TaskWidget.refresh(this@MainActivity) }
             runCatching { com.sueleyman.suelostodo.io.FlaggedMail.syncIfDue(this@MainActivity) }
+            // pull changes from the web app every time the app comes to the front (max. every 20 s).
+            // Runs directly, not via WorkManager, because some devices hold back background jobs.
+            val n = System.currentTimeMillis()
+            if (n - lastResumeSync > 20_000 && com.sueleyman.suelostodo.sync.SyncPrefs.isConnected(this@MainActivity)) {
+                lastResumeSync = n
+                runCatching { com.sueleyman.suelostodo.sync.SyncManager.sync(this@MainActivity) }
+            }
         }
     }
 
@@ -155,3 +162,6 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_OPEN_TRANSFER = "openTransfer"
     }
 }
+
+/** Time of the last sync triggered by bringing the app to the front. */
+private var lastResumeSync = 0L
