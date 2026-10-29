@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sülos ToDo</title><link rel="manifest" href="manifest.json"><link rel="icon" href="icon-192.png"><meta name="theme-color" content="#2564CF">
+<style>
+*{box-sizing:border-box}body{margin:0;font:14px/1.4 "Segoe UI",Roboto,Arial,sans-serif;color:#1f1f1f;background:#faf9f8;height:100vh;display:flex;overflow:hidden}
+button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}input,textarea,select{font:inherit}
+#side{width:270px;background:#fff;border-right:1px solid #e5e2db;display:flex;flex-direction:column}
+#side header{padding:12px 14px;display:flex;align-items:center;gap:8px}#side header b{font-size:17px;flex:1}
+#search{margin:0 12px 8px;padding:7px 10px;border:1px solid #ddd;border-radius:8px}
+#nav{flex:1;overflow:auto;padding-bottom:8px}.nav{display:flex;align-items:center;gap:9px;padding:7px 14px;cursor:pointer;border-radius:6px;margin:0 6px}
+.nav:hover{background:#f3f2f1}.nav.sel{background:#e6f1fb;font-weight:600}.nav .n{margin-left:auto;color:#888;font-size:12px}
+.dot{width:10px;height:10px;border-radius:3px;flex:none}.grp{font-weight:600;font-size:13px;margin-top:4px}.sub{padding-left:30px}.sub2{padding-left:48px}
+.sep{border-top:1px solid #eee;margin:6px 14px}#sidebtn{display:flex;border-top:1px solid #e5e2db}#sidebtn button{flex:1;padding:12px;color:#2564CF;font-weight:600}
+#main{flex:1;display:flex;flex-direction:column;min-width:0}#head{padding:18px 24px 8px;display:flex;align-items:center;gap:8px}
+#head h1{margin:0;font-size:22px;flex:1;cursor:text}#head button{padding:6px 8px;border-radius:6px;color:#555}#head button:hover{background:#eee}
+#add{margin:4px 24px 8px;display:flex;background:#fff;border-radius:8px;box-shadow:0 1px 2px #0002}#add input{flex:1;border:0;padding:12px 14px;outline:0;background:none}
+#tasks{flex:1;overflow:auto;padding:0 24px 24px}.row{display:flex;align-items:center;gap:8px;background:#fff;border-radius:6px;padding:7px 10px;margin:3px 0;box-shadow:0 1px 1px #0001;cursor:pointer}
+.row:hover{background:#f6f6f6}.row.sel{outline:2px solid #2564CF55}.row.drop{border-top:3px solid #2564CF}
+.ck{width:18px;height:18px;border-radius:50%;border:2px solid var(--c);flex:none;display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff}
+.ck.on{background:var(--c)}.t{flex:1;min-width:0}.t.done{text-decoration:line-through;color:#888}.meta{font-size:11px;color:#777}.meta.red{color:#c4314b}
+.fold{width:20px;color:var(--c);font-weight:700;text-align:center}.star{color:#bbb}.star.on{color:#c4314b}
+.dsec{margin:14px 0 4px;font-weight:600;color:#555;cursor:pointer;user-select:none}
+#detail{width:340px;background:#fff;border-left:1px solid #e5e2db;display:none;flex-direction:column;overflow:auto}#detail.open{display:flex}
+#detail .in{padding:16px;display:flex;flex-direction:column;gap:10px}#dtitle{font-size:18px;font-weight:600;border:0;outline:0;width:100%;resize:none}
+.prop{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid #eee;border-radius:8px;background:#fafafa}.prop>span{flex:1}
+#dnote{min-height:140px;border:1px solid #eee;border-radius:8px;padding:10px;background:#fffbea;resize:vertical}
+.subrow{display:flex;align-items:center;gap:8px;padding:5px 2px;border-bottom:1px solid #f0f0f0}
+#status{font-size:11px;color:#888;padding:4px 14px 8px}.pill{font-size:12px;padding:4px 10px;border-radius:14px;background:#eee}
+#login{position:fixed;inset:0;background:#fff;display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;z-index:9;text-align:center;padding:20px}
+.btn{background:#2564CF;color:#fff;padding:10px 18px;border-radius:8px;font-weight:600}
+@media(max-width:800px){#side{width:210px}#detail{position:fixed;right:0;top:0;bottom:0;width:100%;z-index:5}}
+@media print{#side,#add,#detail,#head button{display:none!important}body{display:block;height:auto;overflow:visible;background:#fff}#tasks{overflow:visible}.row{box-shadow:none;border-bottom:1px solid #ddd}}
+</style></head><body>
+<div id="side"><header><img src="icon-192.png" width="28" height="28" style="border-radius:6px"><b>Sülos ToDo</b><button id="syncbtn" title="Jetzt synchronisieren">⟳</button></header>
+<input id="search" placeholder="Suchen …"><div id="nav"></div><div id="status"></div>
+<div id="sidebtn"><button id="newlist">+ Liste</button><button id="newgroup">+ Gruppe</button></div></div>
+<div id="main"><div id="head"><h1 id="title"></h1><button id="hideDone" title="Erledigte ein/aus">👁</button><button id="print" title="Drucken">🖨</button><button id="menu" title="Liste">⋮</button></div>
+<div id="add"><input id="addin" placeholder="+ Aufgabe hinzufügen (Enter)"></div><div id="tasks"></div></div>
+<div id="detail"></div>
+<div id="login"><img src="icon-192.png" width="72"><h2>Sülos ToDo</h2><p>Melde dich mit demselben Google-Konto an wie in der Android-App.<br>Die Daten liegen privat im App-Ordner deines Google Drive.</p>
+<button class="btn" id="loginbtn">Mit Google anmelden</button><button id="offline" style="color:#2564CF">Ohne Anmeldung (nur lokal)</button><p id="loginerr" style="color:#c4314b"></p></div>
+<script src="https://accounts.google.com/gsi/client" async></script>
+<script>
+"use strict";
+// Web OAuth client of the same Google Cloud project as the Android app (replaced at deploy time).
+let CLIENT_ID='%%GOOGLE_WEB_CLIENT_ID%%';if(CLIENT_ID.startsWith('%%'))CLIENT_ID=localStorage.getItem('clientId')||'';
+const SCOPE='https://www.googleapis.com/auth/drive.appdata',FILE='suelostodo-data.json',INBOX='inbox';
+const PAL=[0x2564CF,0x7B5EA7,0xC4314B,0x3E8A5E,0xCA5010,0xBF4C8A,0x038387,0x5D5A58];
+const $=s=>document.querySelector(s),now=()=>Date.now(),uid=()=>crypto.randomUUID();
+const today=()=>{const d=new Date();return Math.floor(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate())/864e5)};
+const dayStr=e=>{const d=new Date(e*864e5);return d.toLocaleDateString('de-DE',{weekday:'short',day:'numeric',month:'short',timeZone:'UTC'})};
+const hex=n=>'#'+((n>>>0)&0xFFFFFF).toString(16).padStart(6,'0');
+const listCol=l=>l?hex((l.color>=0&&l.color<256)?PAL[l.color%PAL.length]:l.color):'#2564CF';
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+// ---------------- state (same JSON format as the Android SyncSnapshot) ----------------
+let db=JSON.parse(localStorage.getItem('db')||'null')||{version:1,lists:[],groups:[],tasks:[],attachments:[]};
+let ui=JSON.parse(localStorage.getItem('ui')||'{}');ui.sel??=INBOX;ui.hideDone??=false;ui.open??={};
+let selTask=null,dirty=JSON.parse(localStorage.getItem('dirty')||'false'),token=null,tokenExp=0,syncing=false;
+if(!db.lists.some(l=>l.id===INBOX))db.lists.push({id:INBOX,name:'Aufgaben',color:0,sortOrder:0,updatedAt:0,deleted:false,groupId:null});
+function save(changed=true){localStorage.setItem('db',JSON.stringify(db));localStorage.setItem('ui',JSON.stringify(ui));
+ if(changed){dirty=true;localStorage.setItem('dirty','true');clearTimeout(save.t);save.t=setTimeout(sync,4000)}render()}
+const live=a=>a.filter(x=>!x.deleted),byOrder=(a,b)=>(a.sortOrder-b.sortOrder)||a.title?.localeCompare?.(b.title);
+const lists=()=>live(db.lists).sort((a,b)=>a.sortOrder-b.sortOrder),groups=()=>live(db.groups).sort((a,b)=>a.sortOrder-b.sortOrder);
+const task=id=>db.tasks.find(t=>t.id===id),kids=id=>live(db.tasks).filter(t=>t.parentId===id).sort(byOrder);
+function touch(o,ch){Object.assign(o,ch,{updatedAt:now()});save()}
+
+// ---------------- actions ----------------
+function addTask(title,listId,parentId=null){title=title.trim();if(!title)return;const p=parentId&&task(parentId);if(p&&p.depth>=2)return;
+ const sib=live(db.tasks).filter(t=>t.listId===(p?p.listId:listId)&&t.parentId===parentId);
+ const sm=SMART[ui.sel],t={id:uid(),listId:p?p.listId:listId,parentId,depth:p?p.depth+1:0,title,note:'',done:false,important:ui.sel==='important',
+  dueDate:(ui.sel==='planned'||ui.sel==='due')?today():null,reminderAt:null,myDay:ui.sel==='myday'?today():null,
+  sortOrder:(sib.length?Math.min(...sib.map(s=>s.sortOrder)):now())-1000,createdAt:now(),completedAt:null,updatedAt:now(),deleted:false,expanded:true};
+ db.tasks.push(t);if(p)p.expanded=true;save()}
+function setDone(t,v){Object.assign(t,{done:v,completedAt:v?now():null,updatedAt:now()});if(v)kids(t.id).forEach(k=>k.done||setDone(k,true))}
+function delTask(t){t.deleted=true;t.updatedAt=now();kids(t.id).forEach(delTask)}
+function moveTask(t,listId){const rec=x=>{x.listId=listId;x.updatedAt=now();kids(x.id).forEach(rec)};rec(t);save()}
+function reorder(drag,target){if(drag.parentId!==target.parentId||drag.listId!==target.listId)return;
+ const sib=kids(drag.parentId).filter(s=>drag.parentId||s.listId===drag.listId).filter(s=>s.id!==drag.id);
+ if(!drag.parentId)sib.splice(0,sib.length,...live(db.tasks).filter(s=>!s.parentId&&s.listId===drag.listId&&s.id!==drag.id).sort(byOrder));
+ sib.splice(sib.findIndex(s=>s.id===target.id),0,drag);const base=now();sib.forEach((s,i)=>{s.sortOrder=base+i*1000;s.updatedAt=now()});save()}
+
+// ---------------- views ----------------
+const SMART={myday:['☀ Mein Tag','#3B6EA5',t=>t.myDay===today()],important:['★ Wichtig','#C4314B',t=>t.important],
+ planned:['▦ Geplant','#038387',t=>t.dueDate!=null],due:['⏰ Fällig','#CA5010',t=>t.dueDate!=null&&t.dueDate<=today()]};
+const openCount=f=>live(db.tasks).filter(t=>!t.done&&lists().some(l=>l.id===t.listId)&&f(t)).length;
+function render(){renderNav();renderTasks();renderDetail();$('#status').textContent=status()}
+function renderNav(){let h='';for(const[k,[n,c,f]]of Object.entries(SMART))h+=`<div class="nav ${ui.sel===k?'sel':''}" data-sel="${k}"><span style="color:${c}">${n.slice(0,1)}</span>${n.slice(2)}<span class="n">${openCount(f)||''}</span></div>`;
+ h+='<div class="sep"></div>';const L=lists(),G=groups(),li=(l,cls='')=>`<div class="nav ${cls} ${ui.sel===l.id?'sel':''}" data-sel="${l.id}"><span class="dot" style="background:${listCol(l)}"></span>${esc(l.name)}<span class="n">${openCount(t=>t.listId===l.id)||''}</span></div>`;
+ L.filter(l=>!l.groupId||!G.some(g=>g.id===l.groupId)).forEach(l=>h+=li(l));
+ G.filter(g=>!g.parentId||!G.some(p=>p.id===g.parentId)).forEach(g=>{const o=ui.open[g.id]!==false;h+=`<div class="nav grp" data-grp="${g.id}" style="color:${g.color?hex(g.color):'#555'}">${o?'▾':'▸'} 📁 ${esc(g.name)}</div>`;
+  if(o){L.filter(l=>l.groupId===g.id).forEach(l=>h+=li(l,'sub'));G.filter(s=>s.parentId===g.id).forEach(s=>{const o2=ui.open[s.id]!==false;
+   h+=`<div class="nav grp sub" data-grp="${s.id}">${o2?'▾':'▸'} 📁 ${esc(s.name)}</div>`;if(o2)L.filter(l=>l.groupId===s.id).forEach(l=>h+=li(l,'sub2'))})}});
+ $('#nav').innerHTML=h}
+function rowsFor(){const q=$('#search').value.trim().toLowerCase(),all=live(db.tasks).filter(t=>lists().some(l=>l.id===t.listId));
+ if(q)return{title:`Suche „${q}“`,color:'#2564CF',flat:all.filter(t=>(t.title+' '+t.note).toLowerCase().includes(q))};
+ if(SMART[ui.sel]){const[n,c,f]=SMART[ui.sel];return{title:n,color:c,flat:all.filter(f).sort((a,b)=>(a.dueDate??1e9)-(b.dueDate??1e9))}}
+ const l=lists().find(l=>l.id===ui.sel)||lists()[0];ui.sel=l.id;return{title:l.name,color:listCol(l),list:l,tree:true}}
+function rowHtml(t,c,depth,flat){const k=flat?[]:kids(t.id),due=t.dueDate!=null?`<span class="meta ${!t.done&&t.dueDate<today()?'red':''}">📅 ${dayStr(t.dueDate)}</span>`:'';
+ const ln=flat?`<span class="meta">${esc(lists().find(l=>l.id===t.listId)?.name)}</span>`:'',sub=k.length?`<span class="meta">${k.filter(x=>x.done).length}/${k.length}</span>`:'';
+ return `<div class="row ${selTask===t.id?'sel':''}" style="--c:${c};margin-left:${depth*28}px" data-id="${t.id}" draggable="${!flat}">
+ <span class="fold" data-fold="${t.id}">${k.length?(t.expanded?'−':'+'):''}</span><span class="ck ${t.done?'on':''}" data-ck="${t.id}">${t.done?'✓':''}</span>
+ <span class="t ${t.done?'done':''}">${esc(t.title)}<br>${ln}${due}${t.note?' <span class="meta">📝</span>':''}</span>${sub}<span class="star ${t.important?'on':''}" data-star="${t.id}">★</span></div>`}
+function renderTasks(){const v=rowsFor();$('#title').textContent=v.title;$('#title').style.color=v.color;$('#menu').style.display=v.list?'':'none';
+ $('#add').style.display=$('#search').value?'none':'';let h='',done=[];
+ if(v.tree){const tree=(t,d)=>{h+=rowHtml(t,v.color,d);if(t.expanded)kids(t.id).filter(k=>!(ui.hideDone&&k.done)).forEach(k=>tree(k,d+1))};
+  live(db.tasks).filter(t=>t.listId===v.list.id&&!t.parentId).sort(byOrder).forEach(t=>t.done?done.push(t):tree(t,0));
+  if(done.length&&!ui.hideDone){h+=`<div class="dsec" data-dsec>${ui.showDoneSec===false?'▸':'▾'} Erledigt (${done.length})</div>`;
+   if(ui.showDoneSec!==false)done.sort((a,b)=>(b.completedAt||0)-(a.completedAt||0)).forEach(t=>h+=rowHtml(t,v.color,0))}}
+ else v.flat.filter(t=>!(ui.hideDone&&t.done)).sort((a,b)=>a.done-b.done).forEach(t=>h+=rowHtml(t,v.color,0,true));
+ $('#tasks').innerHTML=h||'<p style="color:#888;text-align:center;margin-top:40px">Keine Aufgaben</p>';$('#hideDone').style.opacity=ui.hideDone?.4:1}
+function renderDetail(){const t=selTask&&task(selTask),d=$('#detail');if(!t||t.deleted){d.classList.remove('open');selTask=null;return}d.classList.add('open');
+ if(d.dataset.id===t.id&&d.contains(document.activeElement)&&document.activeElement.tagName!=='BUTTON'){return}d.dataset.id=t.id;
+ const c=listCol(lists().find(l=>l.id===t.listId)),path=[lists().find(l=>l.id===t.listId)?.name,t.parentId&&task(t.parentId)?.title].filter(Boolean).join(' › ');
+ const subs=kids(t.id).map(k=>`<div class="subrow" style="--c:${c}"><span class="ck ${k.done?'on':''}" data-ck="${k.id}">${k.done?'✓':''}</span><span class="t ${k.done?'done':''}" data-open="${k.id}" style="cursor:pointer">${esc(k.title)}</span></div>`).join('');
+ const att=live(db.attachments||[]).filter(a=>a.taskId===t.id).map(a=>`<a href="#" data-att="${a.id}" class="pill">📎 ${esc(a.fileName)}</a>`).join(' ');
+ d.innerHTML=`<div class="in" style="--c:${c}"><div style="display:flex;align-items:center"><span class="meta" style="flex:1;cursor:pointer" data-open="${t.parentId||''}">${esc(path)}</span><button data-close>✕</button></div>
+ <div style="display:flex;gap:10px;align-items:flex-start"><span class="ck ${t.done?'on':''}" data-ck="${t.id}" style="margin-top:6px">${t.done?'✓':''}</span><textarea id="dtitle" rows="2">${esc(t.title)}</textarea><span class="star ${t.important?'on':''}" data-star="${t.id}" style="font-size:20px">★</span></div>
+ <div class="prop"><span>☀ Mein Tag</span><input type="checkbox" id="dmyday" ${t.myDay===today()?'checked':''}></div>
+ <div class="prop"><span>📅 Fällig</span><input type="date" id="ddue" value="${t.dueDate!=null?new Date(t.dueDate*864e5).toISOString().slice(0,10):''}"></div>
+ ${t.depth===0?`<div class="prop"><span>📋 Liste</span><select id="dlist">${lists().map(l=>`<option value="${l.id}" ${l.id===t.listId?'selected':''}>${esc(l.name)}</option>`).join('')}</select></div>`:''}
+ <b>Unteraufgaben</b>${subs}${t.depth<2?'<input id="dsub" placeholder="+ Unteraufgabe (Enter)" style="padding:7px;border:1px solid #eee;border-radius:6px">':''}
+ <b>Notiz</b><textarea id="dnote" placeholder="Notiz hinzufügen">${esc(t.note)}</textarea>
+ ${att?`<b>Anhänge</b><div>${att}</div>`:''}
+ <div class="meta">Erstellt ${new Date(t.createdAt).toLocaleString('de-DE')}</div><button style="color:#c4314b;text-align:left" data-del>🗑 Aufgabe löschen</button></div>`;
+ $('#dtitle').oninput=e=>{t.title=e.target.value.replace(/\n/g,'');t.updatedAt=now();save.lazy()};
+ $('#dnote').oninput=e=>{t.note=e.target.value;t.updatedAt=now();save.lazy()};
+ $('#dmyday').onchange=e=>touch(t,{myDay:e.target.checked?today():null});
+ $('#ddue').onchange=e=>touch(t,{dueDate:e.target.value?Math.floor(Date.parse(e.target.value)/864e5):null});
+ $('#dlist')&&($('#dlist').onchange=e=>moveTask(t,e.target.value));
+ $('#dsub')&&($('#dsub').onkeydown=e=>{if(e.key==='Enter'){addTask(e.target.value,t.listId,t.id);d.dataset.id='';render();$('#dsub')?.focus()}})}
+save.lazy=()=>{clearTimeout(save.l);save.l=setTimeout(()=>{localStorage.setItem('db',JSON.stringify(db));save(true)},600);renderTasks()};
+
+// ---------------- events ----------------
+document.addEventListener('click',async e=>{const el=e.target.closest('[data-sel],[data-grp],[data-ck],[data-star],[data-fold],[data-open],[data-close],[data-del],[data-dsec],[data-att],.row');if(!el)return;const ds=el.dataset;
+ if(ds.sel){ui.sel=ds.sel;$('#search').value='';selTask=null;save(false)}
+ else if(ds.grp){ui.open[ds.grp]=ui.open[ds.grp]===false;save(false)}
+ else if(ds.ck){const t=task(ds.ck);setDone(t,!t.done);save()}
+ else if(ds.star){const t=task(ds.star);touch(t,{important:!t.important})}
+ else if(ds.fold!==undefined){const t=task(ds.fold);if(kids(t.id).length){t.expanded=!t.expanded;save(false)}else{selTask=t.id;render()}}
+ else if(ds.open!==undefined){selTask=ds.open||selTask;$('#detail').dataset.id='';render()}
+ else if(ds.close!==undefined){selTask=null;render()}
+ else if(ds.del!==undefined){const t=task(selTask);if(confirm(`„${t.title}“ mit allen Unteraufgaben löschen?`)){delTask(t);selTask=null;save()}}
+ else if(ds.dsec!==undefined){ui.showDoneSec=ui.showDoneSec===false;save(false)}
+ else if(ds.att){e.preventDefault();openAttachment(ds.att)}
+ else if(el.classList.contains('row')){selTask=el.dataset.id;$('#detail').dataset.id='';render()}});
+$('#addin').onkeydown=e=>{if(e.key==='Enter'){const v=rowsFor();addTask(e.target.value,v.list?v.list.id:INBOX);e.target.value=''}};
+$('#search').oninput=()=>renderTasks();$('#hideDone').onclick=()=>{ui.hideDone=!ui.hideDone;save(false)};$('#print').onclick=()=>window.print();
+$('#syncbtn').onclick=()=>getToken(true).then(()=>sync()).catch(e=>{syncErr='Anmeldung fehlgeschlagen: '+e.message;render()});
+$('#newlist').onclick=()=>{const n=prompt('Name der neuen Liste');if(n?.trim()){const l={id:uid(),name:n.trim(),color:lists().length%8,sortOrder:now(),updatedAt:now(),deleted:false,groupId:null};db.lists.push(l);ui.sel=l.id;save()}};
+$('#newgroup').onclick=()=>{const n=prompt('Name der neuen Gruppe');if(n?.trim()){db.groups.push({id:uid(),name:n.trim(),parentId:null,color:null,sortOrder:now(),updatedAt:now(),deleted:false,expanded:true});save()}};
+$('#title').ondblclick=$('#menu').onclick=()=>{const l=lists().find(l=>l.id===ui.sel);if(!l)return;
+ const a=prompt(`Liste „${l.name}“:\n1 = umbenennen\n2 = in Gruppe verschieben\n3 = Farbe (1–8)\n4 = löschen`);
+ if(a==='1'){const n=prompt('Neuer Name',l.name);if(n?.trim())touch(l,{name:n.trim()})}
+ else if(a==='2'){const G=groups(),i=prompt('Gruppe wählen (0 = keine):\n'+G.map((g,i)=>`${i+1} = ${g.name}`).join('\n'));if(i!==null)touch(l,{groupId:G[+i-1]?.id||null})}
+ else if(a==='3'){const i=+prompt('Farbe 1–8: Blau, Lila, Rot, Grün, Orange, Pink, Türkis, Grau');if(i>=1&&i<=8)touch(l,{color:i-1})}
+ else if(a==='4'&&l.id!==INBOX&&confirm('Liste mit allen Aufgaben löschen?')){live(db.tasks).filter(t=>t.listId===l.id).forEach(t=>{t.deleted=true;t.updatedAt=now()});touch(l,{deleted:true});ui.sel=INBOX;save()}};
+// drag & drop among siblings
+let dragId=null;$('#tasks').addEventListener('dragstart',e=>{dragId=e.target.closest('.row')?.dataset.id});
+$('#tasks').addEventListener('dragover',e=>{const r=e.target.closest('.row');if(r&&dragId){e.preventDefault();document.querySelectorAll('.drop').forEach(x=>x.classList.remove('drop'));r.classList.add('drop')}});
+$('#tasks').addEventListener('drop',e=>{const r=e.target.closest('.row');document.querySelectorAll('.drop').forEach(x=>x.classList.remove('drop'));if(r&&dragId&&r.dataset.id!==dragId)reorder(task(dragId),task(r.dataset.id));dragId=null});
+
+// ---------------- Google Drive sync (appDataFolder, same file as the Android app) ----------------
+let tokenClient=null,tokenWait=null;
+// Tokens are only requested from a click (browsers block the Google popup otherwise); background syncs use the cached token.
+function getToken(interactive){if(token&&now()<tokenExp-60e3)return Promise.resolve(token);if(!interactive)return Promise.reject(new Error('auth'));if(!CLIENT_ID||!window.google)return Promise.reject(new Error('nologin'));
+ tokenClient??=google.accounts.oauth2.initTokenClient({client_id:CLIENT_ID,scope:SCOPE,error_callback:e=>tokenWait?.rej(new Error(e.type||'popup')),callback:r=>{if(r.error){tokenWait?.rej(new Error(r.error));return}
+  token=r.access_token;tokenExp=now()+r.expires_in*1000;localStorage.setItem('loggedIn','1');tokenWait?.res(token)}});
+ return new Promise((res,rej)=>{tokenWait={res,rej};tokenClient.requestAccessToken({prompt:''})})}
+async function api(url,opt={}){const r=await fetch(url,{...opt,headers:{Authorization:'Bearer '+await getToken(false),...(opt.headers||{})}});
+ if(r.status===401){token=null;throw new Error('auth')}if(!r.ok)throw new Error('Drive '+r.status);return r}
+const DRV='https://www.googleapis.com/drive/v3/files',UPL='https://www.googleapis.com/upload/drive/v3/files';
+async function findFile(){const q=encodeURIComponent(`name='${FILE}'`);const j=await(await api(`${DRV}?spaces=appDataFolder&q=${q}&fields=files(id,version,modifiedTime)&orderBy=modifiedTime desc`)).json();return j.files[0]}
+function merge(remote){let changed=false;for(const k of['lists','groups','tasks','attachments']){const loc=new Map((db[k]||=[]).map(x=>[x.id,x]));
+  for(const r of remote[k]||[]){const l=loc.get(r.id);if(!l){db[k].push(r);changed=true}else if(r.updatedAt>l.updatedAt){Object.assign(l,r,k==='tasks'||k==='groups'?{expanded:l.expanded}:{});changed=true}}}return changed}
+const localNewer=remote=>['lists','groups','tasks','attachments'].some(k=>{const m=new Map((remote[k]||[]).map(x=>[x.id,x.updatedAt]));return(db[k]||[]).some(x=>!(m.get(x.id)>=x.updatedAt))});
+let lastSync=+localStorage.getItem('lastSync')||0,syncErr='';
+const status=()=>syncing?'Synchronisiere …':syncErr?'⚠ '+syncErr:lastSync?'Synchronisiert '+new Date(lastSync).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})+(dirty?' · Änderungen ausstehend':''):'Nur lokal gespeichert';
+async function sync(manual){if(syncing||!localStorage.getItem('loggedIn'))return;syncing=true;syncErr='';$('#status').textContent=status();
+ try{for(let attempt=0;attempt<3;attempt++){const f=await findFile();let remote={lists:[],groups:[],tasks:[],attachments:[]};
+   if(f)remote=await(await api(`${DRV}/${f.id}?alt=media`)).json();merge(remote);
+   if(!localNewer(remote)){dirty=false;break}
+   // upload only if nobody else wrote in between (Drive "version" grows with every change)
+   if(f){const v=(await(await api(`${DRV}/${f.id}?fields=version`)).json()).version;if(v!==f.version)continue}
+   const body=JSON.stringify({...db,exportedAt:now()});
+   if(f)await api(`${UPL}/${f.id}?uploadType=media`,{method:'PATCH',headers:{'Content-Type':'application/json'},body});
+   else{const fd=new FormData();fd.append('m',new Blob([JSON.stringify({name:FILE,parents:['appDataFolder']})],{type:'application/json'}));fd.append('f',new Blob([body],{type:'application/json'}));
+    await api(`${UPL}?uploadType=multipart`,{method:'POST',body:fd})}
+   dirty=false;break}
+  lastSync=now();localStorage.setItem('lastSync',lastSync);localStorage.setItem('dirty',dirty)}
+ catch(e){syncErr=e.message==='auth'||e.message==='nologin'?'Anmeldung nötig – ⟳ antippen':e.message;}
+ syncing=false;localStorage.setItem('db',JSON.stringify(db));render()}
+async function openAttachment(id){const a=db.attachments.find(x=>x.id===id);try{const q=encodeURIComponent(`name='att_${id}'`);
+ const j=await(await api(`${DRV}?spaces=appDataFolder&q=${q}&fields=files(id)`)).json();if(!j.files[0])return alert('Anhang noch nicht synchronisiert');
+ const b=await(await api(`${DRV}/${j.files[0].id}?alt=media`)).blob();const u=URL.createObjectURL(new Blob([b],{type:a.mimeType}));
+ const l=document.createElement('a');l.href=u;l.download=a.fileName;if(/^(image|application\/pdf|text)/.test(a.mimeType))l.target='_blank',l.removeAttribute('download');l.click()}catch(e){alert('Anhang: '+e.message)}}
+
+// ---------------- start ----------------
+$('#loginbtn').onclick=async()=>{if(!CLIENT_ID){const c=prompt('Google OAuth Web-Client-ID:');if(!c)return;CLIENT_ID=c.trim();localStorage.setItem('clientId',CLIENT_ID)}
+ try{await getToken(true);$('#login').style.display='none';sync()}catch(e){$('#loginerr').textContent='Anmeldung fehlgeschlagen: '+e.message}};
+$('#offline').onclick=()=>{localStorage.setItem('offlineOk','1');$('#login').style.display='none'};
+if(!localStorage.getItem('loggedIn')&&!localStorage.getItem('offlineOk'))$('#login').style.display='flex';
+render();window.addEventListener('load',()=>{if(localStorage.getItem('loggedIn'))setTimeout(()=>sync(),800)});
+setInterval(()=>sync(),3*60e3);document.addEventListener('visibilitychange',()=>document.visibilityState==='visible'&&sync());
+if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js');
+</script></body></html>

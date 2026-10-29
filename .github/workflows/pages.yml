@@ -1,0 +1,29 @@
+name: Web-App (GitHub Pages)
+
+on:
+  push:
+    branches: [ main, master ]
+    paths: [ "web/**", ".github/workflows/pages.yml" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency: { group: pages, cancel-in-progress: true }
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: { name: github-pages, url: "${{ steps.d.outputs.page_url }}" }
+    steps:
+      - uses: actions/checkout@v4
+      - name: Insert Google web client ID
+        env: { CID: "${{ secrets.GOOGLE_WEB_CLIENT_ID }}" }
+        run: sed -i "s|%%GOOGLE_WEB_CLIENT_ID%%|${CID:-%%GOOGLE_WEB_CLIENT_ID%%}|" web/index.html
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with: { path: web }
+      - id: d
+        uses: actions/deploy-pages@v4
