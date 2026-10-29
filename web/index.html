@@ -56,7 +56,7 @@ const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&g
 // ---------------- state (same JSON format as the Android SyncSnapshot) ----------------
 let db=JSON.parse(localStorage.getItem('db')||'null')||{version:1,lists:[],groups:[],tasks:[],attachments:[]};
 let ui=JSON.parse(localStorage.getItem('ui')||'{}');ui.sel??=INBOX;ui.hideDone??=false;ui.open??={};
-let selTask=null,dirty=JSON.parse(localStorage.getItem('dirty')||'false'),token=null,tokenExp=0,syncing=false;
+let selTask=null,dirty=JSON.parse(localStorage.getItem('dirty')||'false'),token=sessionStorage.getItem('tok'),tokenExp=+sessionStorage.getItem('tokExp')||0,syncing=false;
 if(!db.lists.some(l=>l.id===INBOX))db.lists.push({id:INBOX,name:'Aufgaben',color:0,sortOrder:0,updatedAt:0,deleted:false,groupId:null});
 function save(changed=true){localStorage.setItem('db',JSON.stringify(db));localStorage.setItem('ui',JSON.stringify(ui));
  if(changed){dirty=true;localStorage.setItem('dirty','true');clearTimeout(save.t);save.t=setTimeout(sync,4000)}render()}
@@ -142,7 +142,7 @@ document.addEventListener('click',async e=>{const el=e.target.closest('[data-sel
  else if(ds.close!==undefined){selTask=null;render()}
  else if(ds.del!==undefined){const t=task(selTask);if(confirm(`„${t.title}“ mit allen Unteraufgaben löschen?`)){delTask(t);selTask=null;save()}}
  else if(ds.dsec!==undefined){ui.showDoneSec=ui.showDoneSec===false;save(false)}
- else if(ds.att){e.preventDefault();openAttachment(ds.att)}
+ else if(ds.att){e.preventDefault();getToken(true).then(()=>openAttachment(ds.att)).catch(err=>alert('Anmeldung fehlgeschlagen: '+err.message))}
  else if(el.classList.contains('row')){selTask=el.dataset.id;$('#detail').dataset.id='';render()}});
 $('#addin').onkeydown=e=>{if(e.key==='Enter'){const v=rowsFor();addTask(e.target.value,v.list?v.list.id:INBOX);e.target.value=''}};
 $('#search').oninput=()=>renderTasks();$('#hideDone').onclick=()=>{ui.hideDone=!ui.hideDone;save(false)};$('#print').onclick=()=>window.print();
@@ -165,7 +165,7 @@ let tokenClient=null,tokenWait=null;
 // Tokens are only requested from a click (browsers block the Google popup otherwise); background syncs use the cached token.
 function getToken(interactive){if(token&&now()<tokenExp-60e3)return Promise.resolve(token);if(!interactive)return Promise.reject(new Error('auth'));if(!CLIENT_ID||!window.google)return Promise.reject(new Error('nologin'));
  tokenClient??=google.accounts.oauth2.initTokenClient({client_id:CLIENT_ID,scope:SCOPE,error_callback:e=>tokenWait?.rej(new Error(e.type||'popup')),callback:r=>{if(r.error){tokenWait?.rej(new Error(r.error));return}
-  token=r.access_token;tokenExp=now()+r.expires_in*1000;localStorage.setItem('loggedIn','1');tokenWait?.res(token)}});
+  token=r.access_token;tokenExp=now()+r.expires_in*1000;sessionStorage.setItem('tok',token);sessionStorage.setItem('tokExp',tokenExp);localStorage.setItem('loggedIn','1');tokenWait?.res(token)}});
  return new Promise((res,rej)=>{tokenWait={res,rej};tokenClient.requestAccessToken({prompt:''})})}
 async function api(url,opt={}){const r=await fetch(url,{...opt,headers:{Authorization:'Bearer '+await getToken(false),...(opt.headers||{})}});
  if(r.status===401){token=null;throw new Error('auth')}if(!r.ok)throw new Error('Drive '+r.status);return r}
