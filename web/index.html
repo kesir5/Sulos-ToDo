@@ -25,7 +25,7 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}input,
 .prop{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid #eee;border-radius:8px;background:#fafafa}.prop>span{flex:1}
 #dnote{min-height:140px;border:1px solid #eee;border-radius:8px;padding:10px;background:#fffbea;resize:vertical}
 .subrow{display:flex;align-items:center;gap:8px;padding:5px 2px;border-bottom:1px solid #f0f0f0}
-#status{font-size:11px;color:#888;padding:4px 14px 8px}.pill{font-size:12px;padding:4px 10px;border-radius:14px;background:#eee}
+#status{font-size:11px;color:#888;padding:4px 14px 8px}#warn{display:none;background:#fde7ea;color:#a3283d;padding:8px 24px;cursor:pointer;font-weight:600}.pill{font-size:12px;padding:4px 10px;border-radius:14px;background:#eee}
 #login{position:fixed;inset:0;background:#fff;display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;z-index:9;text-align:center;padding:20px}
 .btn{background:#2564CF;color:#fff;padding:10px 18px;border-radius:8px;font-weight:600}
 @media(max-width:800px){#side{width:210px}#detail{position:fixed;right:0;top:0;bottom:0;width:100%;z-index:5}}
@@ -35,7 +35,7 @@ button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}input,
 <input id="search" placeholder="Suchen …"><div id="nav"></div><div id="status"></div>
 <div id="sidebtn"><button id="newlist">+ Liste</button><button id="newgroup">+ Gruppe</button></div></div>
 <div id="main"><div id="head"><h1 id="title"></h1><button id="hideDone" title="Erledigte ein/aus">👁</button><button id="print" title="Drucken">🖨</button><button id="menu" title="Liste">⋮</button></div>
-<div id="add"><input id="addin" placeholder="+ Aufgabe hinzufügen (Enter)"></div><div id="tasks"></div></div>
+<div id="warn" onclick="getToken(true).then(()=>sync()).catch(e=>alert(e.message))"></div><div id="add"><input id="addin" placeholder="+ Aufgabe hinzufügen (Enter)"></div><div id="tasks"></div></div>
 <div id="detail"></div>
 <div id="login"><img src="icon-192.png" width="72"><h2>Sülos ToDo</h2><p>Melde dich mit demselben Google-Konto an wie in der Android-App.<br>Die Daten liegen privat im App-Ordner deines Google Drive.</p>
 <button class="btn" id="loginbtn">Mit Google anmelden</button><button id="offline" style="color:#2564CF">Ohne Anmeldung (nur lokal)</button><p id="loginerr" style="color:#c4314b"></p></div>
@@ -84,7 +84,7 @@ function reorder(drag,target){if(drag.parentId!==target.parentId||drag.listId!==
 const SMART={myday:['☀ Mein Tag','#3B6EA5',t=>t.myDay===today()],important:['★ Wichtig','#C4314B',t=>t.important],
  planned:['▦ Geplant','#038387',t=>t.dueDate!=null],due:['⏰ Fällig','#CA5010',t=>t.dueDate!=null&&t.dueDate<=today()]};
 const openCount=f=>live(db.tasks).filter(t=>!t.done&&lists().some(l=>l.id===t.listId)&&f(t)).length;
-function render(){renderNav();renderTasks();renderDetail();$('#status').textContent=status()}
+function render(){renderNav();renderTasks();renderDetail();$('#status').textContent=status();const w=$('#warn');w.style.display=syncErr?'block':'none';w.textContent='⚠ Nicht synchronisiert: '+syncErr+' – hier klicken'}
 function renderNav(){let h='';for(const[k,[n,c,f]]of Object.entries(SMART))h+=`<div class="nav ${ui.sel===k?'sel':''}" data-sel="${k}"><span style="color:${c}">${n.slice(0,1)}</span>${n.slice(2)}<span class="n">${openCount(f)||''}</span></div>`;
  h+='<div class="sep"></div>';const L=lists(),G=groups(),li=(l,cls='')=>`<div class="nav ${cls} ${ui.sel===l.id?'sel':''}" data-sel="${l.id}"><span class="dot" style="background:${listCol(l)}"></span>${esc(l.name)}<span class="n">${openCount(t=>t.listId===l.id)||''}</span></div>`;
  L.filter(l=>!l.groupId||!G.some(g=>g.id===l.groupId)).forEach(l=>h+=li(l));
@@ -132,7 +132,10 @@ function renderDetail(){const t=selTask&&task(selTask),d=$('#detail');if(!t||t.d
 save.lazy=()=>{clearTimeout(save.l);save.l=setTimeout(()=>{localStorage.setItem('db',JSON.stringify(db));save(true)},600);renderTasks()};
 
 // ---------------- events ----------------
-document.addEventListener('click',async e=>{const el=e.target.closest('[data-sel],[data-grp],[data-ck],[data-star],[data-fold],[data-open],[data-close],[data-del],[data-dsec],[data-att],.row');if(!el)return;const ds=el.dataset;
+function ensureToken(){if(localStorage.getItem('loggedIn')&&!(token&&now()<tokenExp-60e3)&&!ensureToken.busy){ensureToken.busy=true;
+ getToken(true).then(()=>sync()).catch(()=>{}).finally(()=>ensureToken.busy=false)}}
+document.addEventListener('keydown',e=>{if(e.key==='Enter')ensureToken()},true);
+document.addEventListener('click',async e=>{ensureToken();const el=e.target.closest('[data-sel],[data-grp],[data-ck],[data-star],[data-fold],[data-open],[data-close],[data-del],[data-dsec],[data-att],.row');if(!el)return;const ds=el.dataset;
  if(ds.sel){ui.sel=ds.sel;$('#search').value='';selTask=null;save(false)}
  else if(ds.grp){ui.open[ds.grp]=ui.open[ds.grp]===false;save(false)}
  else if(ds.ck){const t=task(ds.ck);setDone(t,!t.done);save()}
